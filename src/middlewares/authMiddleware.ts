@@ -33,7 +33,7 @@ export const protect = (
 };
 
 //role based
-export const roleAccess = (role: "user" | "operator") => {
+export const roleAccess = (role: "user" | "operator" | "admin") => {
   return (
     req: Request & { user?: JwtPayload },
     res: Response,

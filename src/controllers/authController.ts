@@ -9,10 +9,14 @@ const createError = (message: string, statusCode: number) => {
   return err;
 };
 
-// Registration
-export const register = async (req: Request, res: Response, next: NextFunction) => {
+// ---------------- REGISTER ----------------
+export const register = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       throw createError("All fields are required", 400);
@@ -23,7 +27,11 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       throw createError("User already exists", 400);
     }
 
-    const user = await User.create({ name, email, password, role });
+    const user = await User.create({
+      name,
+      email,
+      password
+    });
 
     res.status(201).json({
       success: true,
@@ -35,12 +43,16 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       }
     });
   } catch (error) {
-    next(error); 
+    next(error);
   }
 };
 
-// Login
-export const login = async (req: Request, res: Response, next: NextFunction) => {
+// ---------------- LOGIN ----------------
+export const login = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { email, password } = req.body;
 
@@ -48,7 +60,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       throw createError("All fields are required", 400);
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
       throw createError("Invalid credentials", 400);
     }
@@ -65,6 +77,6 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       token
     });
   } catch (error) {
-    next(error); 
+    next(error);
   }
 };
