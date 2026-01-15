@@ -4,6 +4,7 @@ import authRoutes from "./routes/authRoutes"
 import userRoutes from "./routes/userRoutes";
 import { errorHandler } from "./middlewares/errorMiddleware";
 import tourRoutes from "./routes/tourRoutes";
+import bookingRoutes from "./routes/bookingRoutes";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 
 app.use("/api/tours", tourRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 app.use(errorHandler);
 
