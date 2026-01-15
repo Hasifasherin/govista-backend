@@ -16,7 +16,7 @@ export const register = async (
   next: NextFunction
 ) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
 
     if (!name || !email || !password) {
       throw createError("All fields are required", 400);
@@ -30,7 +30,8 @@ export const register = async (
     const user = await User.create({
       name,
       email,
-      password
+      password,
+      role: role || "user"
     });
 
     res.status(201).json({
