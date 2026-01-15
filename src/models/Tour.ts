@@ -34,13 +34,15 @@ const tourSchema = new mongoose.Schema(
       }
     ],
     image: {
-      type: String // will hold Cloudinary URL
+      type: String
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true
-    }
+    },
+    averageRating: { type: Number, default: 0 },
+    reviewsCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
