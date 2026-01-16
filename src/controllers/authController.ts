@@ -9,46 +9,53 @@ const createError = (message: string, statusCode: number) => {
   return err;
 };
 
-// ---------------- REGISTER ----------------
+// REGISTER
 export const register = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       throw createError("All fields are required", 400);
     }
 
-    const userExists = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase();
+
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       throw createError("User already exists", 400);
     }
 
+    // 🚫 role is NOT accepted from request
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password,
-      role: role || "user"
     });
+
+    const token = generateToken(user._id.toString(), user.role);
 
     res.status(201).json({
       success: true,
+      token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// ---------------- LOGIN ----------------
+
+// LOGIN
+
 export const login = async (
   req: Request,
   res: Response,
@@ -61,7 +68,11 @@ export const login = async (
       throw createError("All fields are required", 400);
     }
 
-    const user = await User.findOne({ email }).select("+password");
+    const normalizedEmail = email.toLowerCase();
+
+    // password is select:false → must explicitly select
+    const user = await User.findOne({ email: normalizedEmail }).select("+password");
+
     if (!user) {
       throw createError("Invalid credentials", 400);
     }
@@ -75,7 +86,7 @@ export const login = async (
 
     res.status(200).json({
       success: true,
-      token
+      token,
     });
   } catch (error) {
     next(error);
