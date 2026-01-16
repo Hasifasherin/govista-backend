@@ -1,25 +1,51 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import Booking from "../models/Booking";
 import Tour from "../models/Tour";
 
-// 1️⃣ Request booking (user)
-export const requestBooking = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
+//  REQUEST BOOKING (USER)
+export const requestBooking = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const { tourId, bookingDate } = req.body;
 
     if (!tourId || !bookingDate) {
-      return res.status(400).json({ success: false, message: "tourId and bookingDate are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "tourId and bookingDate are required" });
     }
 
-    // Check if tour exists
+    if (!mongoose.Types.ObjectId.isValid(tourId)) {
+      return res.status(400).json({ success: false, message: "Invalid tour id" });
+    }
+
     const tour = await Tour.findById(tourId);
-    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+    if (!tour) {
+      return res.status(404).json({ success: false, message: "Tour not found" });
+    }
+
+    // ❗ Prevent duplicate booking
+    const existingBooking = await Booking.findOne({
+      tourId,
+      userId: req.user!.id,
+      bookingDate,
+      status: { $in: ["pending", "accepted"] },
+    });
+
+    if (existingBooking) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Booking already exists" });
+    }
 
     const booking = await Booking.create({
       tourId,
       userId: req.user!.id,
       bookingDate,
-      status: "pending"
+      status: "pending",
     });
 
     res.status(201).json({ success: true, booking });
@@ -28,64 +54,90 @@ export const requestBooking = async (req: Request & { user?: any }, res: Respons
   }
 };
 
-// 2️⃣ Get bookings for a user
-export const getUserBookings = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
+//  GET USER BOOKINGS
+export const getUserBookings = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const bookings = await Booking.find({ userId: req.user!.id })
       .populate("tourId", "title price location")
-      .populate("userId", "name email");
+      .sort({ createdAt: -1 });
 
-    res.json({ success: true, bookings });
+    res.json({ success: true, count: bookings.length, bookings });
   } catch (error) {
     next(error);
   }
 };
 
-// 3️⃣ Get all bookings for operator (for their tours)
-export const getOperatorBookings = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
+//  GET OPERATOR BOOKINGS
+export const getOperatorBookings = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
   try {
+    if (req.user!.role !== "operator") {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
     const tours = await Tour.find({ createdBy: req.user!.id }).select("_id");
-    const tourIds = tours.map(t => t._id);
+    const tourIds = tours.map((t) => t._id);
 
     const bookings = await Booking.find({ tourId: { $in: tourIds } })
       .populate("tourId", "title")
-      .populate("userId", "name email");
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 });
 
-    res.json({ success: true, bookings });
+    res.json({ success: true, count: bookings.length, bookings });
   } catch (error) {
     next(error);
   }
 };
 
-// 4️⃣ Accept / Reject booking (operator)
+//  ACCEPT / REJECT BOOKING (OPERATOR)
 export const updateBookingStatus = async (
   req: Request & { user?: any },
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { status } = req.body; // "accepted" or "rejected"
-
-    // Find booking and populate tourId to access createdBy
-    const booking = await Booking.findById(req.params.id).populate("tourId");
-
-    if (!booking)
-      return res.status(404).json({ success: false, message: "Booking not found" });
-
-    // Cast tourId to any so TypeScript knows it has createdBy
-    const tour = booking.tourId as any;
-
-    // Check if operator owns this tour
-    if (tour.createdBy.toString() !== req.user!.id) {
+    if (req.user!.role !== "operator") {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    // Validate status
+    const bookingId = String(req.params.id);
+    const { status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid booking id" });
+    }
+
     if (!["accepted", "rejected"].includes(status)) {
       return res.status(400).json({ success: false, message: "Invalid status" });
     }
 
-    // Update booking status
+    const booking = await Booking.findById(bookingId).populate("tourId");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    if (booking.status !== "pending") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Booking already processed" });
+    }
+
+    const tour = booking.tourId as any;
+
+    if (tour.createdBy.toString() !== req.user!.id) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
     booking.status = status;
     await booking.save();
 
@@ -95,14 +147,36 @@ export const updateBookingStatus = async (
   }
 };
 
-// 5️⃣ Cancel booking (user)
-export const cancelBooking = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
+//  CANCEL BOOKING (USER)
+export const cancelBooking = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
+    const bookingId = String(req.params.id);
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid booking id" });
+    }
+
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
 
     if (booking.userId.toString() !== req.user!.id) {
       return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    // ❗ Business rule
+    if (booking.status !== "pending") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Cannot cancel this booking" });
     }
 
     booking.status = "cancelled";
