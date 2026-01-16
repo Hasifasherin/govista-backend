@@ -8,6 +8,7 @@ import bookingRoutes from "./routes/bookingRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
 import operatorRoutes from "./routes/operatorRoutes";
 import adminAuthRoutes from "./routes/adminAuthRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/admin", adminAuthRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use(errorHandler);
 
