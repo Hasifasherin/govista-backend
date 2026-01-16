@@ -2,7 +2,7 @@ import express from "express";
 import { protectAdmin } from "../middlewares/adminAuthMiddleware";
 import {
   getAllUsers,
-  toggleUserBlock,
+  toggleUserBlock,getDashboardStats,
   getAllOperators,getAllBookings,getBookingDetails,
   updateOperatorStatus,getAllTours,updateTourApproval,toggleTourActive,toggleTourFeatured
 } from "../controllers/adminController";
@@ -29,5 +29,8 @@ router.put("/tours/:id/feature", toggleTourFeatured);
 // Bookings (Admin)
 router.get("/bookings", getAllBookings);          
 router.get("/bookings/:id", getBookingDetails);   
+
+//analytic
+router.get("/dashboard", getDashboardStats);
 
 export default router;

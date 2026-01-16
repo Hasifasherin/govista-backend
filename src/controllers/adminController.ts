@@ -174,3 +174,35 @@ export const getBookingDetails = async (
     next(error);
   }
 };
+
+//analytic 
+export const getDashboardStats = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const totalUsers = await User.countDocuments({ role: "user" });
+    const totalOperators = await User.countDocuments({ role: "operator" });
+    const totalBookings = await Booking.countDocuments();
+    
+    const bookingsByStatus = await Booking.aggregate([
+      { $group: { _id: "$status", count: { $sum: 1 } } }
+    ]);
+
+    const topDestinations = await Booking.aggregate([
+      { $lookup: { from: "tours", localField: "tourId", foreignField: "_id", as: "tour" } },
+      { $unwind: "$tour" },
+      { $group: { _id: "$tour.location", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
+    ]);
+
+    res.json({
+      success: true,
+      totalUsers,
+      totalOperators,
+      totalBookings,
+      bookingsByStatus,
+      topDestinations
+    });
+  } catch (error) {
+    next(error);
+  }
+};
