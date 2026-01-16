@@ -1,8 +1,8 @@
 import express from "express";
 import { protectAdmin } from "../middlewares/adminAuthMiddleware";
 import {
-  getAllUsers,
-  toggleUserBlock,getDashboardStats,
+  getAllUsers,getUpcomingTrips,
+  toggleUserBlock,getDashboardStats,getMonthlyCalendar,
   getAllOperators,getAllBookings,getBookingDetails,
   updateOperatorStatus,getAllTours,updateTourApproval,toggleTourActive,toggleTourFeatured
 } from "../controllers/adminController";
@@ -32,5 +32,9 @@ router.get("/bookings/:id", getBookingDetails);
 
 //analytic
 router.get("/dashboard", getDashboardStats);
+
+// Calendar & Trips
+router.get("/calendar", getMonthlyCalendar);
+router.get("/upcoming-trips", getUpcomingTrips);
 
 export default router;

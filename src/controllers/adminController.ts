@@ -206,3 +206,47 @@ export const getDashboardStats = async (req: Request, res: Response, next: NextF
     next(error);
   }
 };
+
+//calender 
+//  Monthly Calendar Bookings
+export const getMonthlyCalendar = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { month } = req.query; // format: YYYY-MM
+    if (!month) return res.status(400).json({ success: false, message: "Month is required" });
+
+    const [year, monthNumber] = (month as string).split("-").map(Number);
+
+    const startDate = new Date(year, monthNumber - 1, 1);
+    const endDate = new Date(year, monthNumber, 0, 23, 59, 59);
+
+    const bookings = await Booking.find({
+      bookingDate: { $gte: startDate, $lte: endDate },
+      status: "accepted",
+    })
+      .populate("tourId", "title location")
+      .populate("userId", "name email");
+
+    res.json({ success: true, count: bookings.length, bookings });
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  Upcoming Trips
+export const getUpcomingTrips = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const today = new Date();
+
+    const bookings = await Booking.find({
+      bookingDate: { $gte: today },
+      status: "accepted",
+    })
+      .populate("tourId", "title location duration")
+      .populate("userId", "name email")
+      .sort({ bookingDate: 1 });
+
+    res.json({ success: true, count: bookings.length, bookings });
+  } catch (error) {
+    next(error);
+  }
+};
