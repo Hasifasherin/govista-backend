@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/User";
 import Tour from "../models/Tour";
+import Booking from "../models/Booking";
 
 
 //  Get All Users
@@ -122,6 +123,53 @@ export const toggleTourFeatured = async (req: Request, res: Response, next: Next
     await tour.save();
 
     res.json({ success: true, tour });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+// booking 
+//  Get All Bookings (Admin)
+export const getAllBookings = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { status, date } = req.query;
+
+    const filter: any = {};
+    if (status) filter.status = status;
+    if (date) filter.bookingDate = new Date(date as string);
+
+    const bookings = await Booking.find(filter)
+      .populate("tourId", "title location price createdBy")
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, count: bookings.length, bookings });
+  } catch (error) {
+    next(error);
+  }
+};
+
+//  Get Booking Details by ID
+export const getBookingDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+      .populate("tourId", "title description location price duration createdBy")
+      .populate("userId", "name email");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    res.json({ success: true, booking });
   } catch (error) {
     next(error);
   }

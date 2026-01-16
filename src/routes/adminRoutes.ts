@@ -3,7 +3,7 @@ import { protectAdmin } from "../middlewares/adminAuthMiddleware";
 import {
   getAllUsers,
   toggleUserBlock,
-  getAllOperators,
+  getAllOperators,getAllBookings,getBookingDetails,
   updateOperatorStatus,getAllTours,updateTourApproval,toggleTourActive,toggleTourFeatured
 } from "../controllers/adminController";
 
@@ -26,5 +26,8 @@ router.put("/tours/:id/approval", updateTourApproval);
 router.put("/tours/:id/active", toggleTourActive);
 router.put("/tours/:id/feature", toggleTourFeatured);
 
+// Bookings (Admin)
+router.get("/bookings", getAllBookings);          
+router.get("/bookings/:id", getBookingDetails);   
 
 export default router;
