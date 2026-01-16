@@ -6,6 +6,7 @@ import { errorHandler } from "./middlewares/errorMiddleware";
 import tourRoutes from "./routes/tourRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
+import operatorRoutes from "./routes/operatorRoutes";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/tours", tourRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/operator", operatorRoutes);
 
 app.use(errorHandler);
 

@@ -43,6 +43,8 @@ const tourSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0 },
     reviewsCount: { type: Number, default: 0 },
+     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" }
+
   },
   { timestamps: true }
 );

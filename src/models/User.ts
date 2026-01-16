@@ -21,7 +21,8 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["user", "operator", "admin"],
       default: "user"
-    }
+    },
+    wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tour" }]
   },
   {
     timestamps: true
