@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import User from "../models/User";
+import Tour from "../models/Tour";
+
 
 //  Get All Users
 export const getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
@@ -56,6 +58,70 @@ export const updateOperatorStatus = async (req: Request, res: Response, next: Ne
     await operator.save();
 
     res.json({ success: true, operator });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+//tour controller
+// 1️⃣ Get All Tours
+export const getAllTours = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tours = await Tour.find().populate("createdBy", "name email role");
+    res.json({ success: true, count: tours.length, tours });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 2️⃣ Approve / Reject Tour
+export const updateTourApproval = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // expected: "approved" | "rejected"
+
+    const tour = await Tour.findById(id);
+    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" });
+    }
+
+    tour.status = status;
+    await tour.save();
+
+    res.json({ success: true, tour });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 3️⃣ Activate / Deactivate Tour
+export const toggleTourActive = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tour = await Tour.findById(req.params.id);
+    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+
+    tour.isActive = !tour.isActive;
+    await tour.save();
+
+    res.json({ success: true, tour });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 4️⃣ Feature / Unfeature Tour
+export const toggleTourFeatured = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tour = await Tour.findById(req.params.id);
+    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+
+    tour.isFeatured = !tour.isFeatured;
+    await tour.save();
+
+    res.json({ success: true, tour });
   } catch (error) {
     next(error);
   }
