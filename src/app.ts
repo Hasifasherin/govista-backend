@@ -9,6 +9,7 @@ import reviewRoutes from "./routes/reviewRoutes";
 import operatorRoutes from "./routes/operatorRoutes";
 import adminAuthRoutes from "./routes/adminAuthRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import messageRoutes from "./routes/messageRoutes";
 
 const app = express();
 
@@ -29,6 +30,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/admin", adminRoutes);
+
+app.use("/api/messages", messageRoutes);
 
 app.use(errorHandler);
 

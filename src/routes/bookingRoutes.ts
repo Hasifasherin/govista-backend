@@ -1,28 +1,35 @@
 import express from "express";
 import { protect, roleAccess } from "../middlewares/authMiddleware";
-import { 
-  requestBooking, 
-  getUserBookings, 
-  getOperatorBookings, 
-  updateBookingStatus, 
-  cancelBooking 
+import {
+  requestBooking,
+  getUserBookings,
+  getOperatorBookings,
+  updateBookingStatus,
+  cancelBooking
 } from "../controllers/bookingController";
 
 const router = express.Router();
 
-// User requests a booking
-router.post("/", protect, roleAccess("user"), requestBooking);
+// 🔐 All booking routes require login
+router.use(protect);
 
-// User gets their bookings
-router.get("/my-bookings", protect, roleAccess("user"), getUserBookings);
+// ================= USER =================
 
-// User cancels booking
-router.put("/cancel/:id", protect, roleAccess("user"), cancelBooking);
+// Request booking
+router.post("/", roleAccess("user"), requestBooking);
 
-// Operator gets bookings for their tours
-router.get("/operator", protect, roleAccess("operator"), getOperatorBookings);
+// Get my bookings
+router.get("/my-bookings", roleAccess("user"), getUserBookings);
 
-// Operator accepts/rejects booking
-router.put("/status/:id", protect, roleAccess("operator"), updateBookingStatus);
+// Cancel booking
+router.put("/:id/cancel", roleAccess("user"), cancelBooking);
+
+// ================= OPERATOR =================
+
+// Get operator bookings
+router.get("/operator", roleAccess("operator"), getOperatorBookings);
+
+// Accept / Reject booking
+router.put("/:id/status", roleAccess("operator"), updateBookingStatus);
 
 export default router;

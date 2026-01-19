@@ -8,6 +8,7 @@ import {
   getTour, 
   updateTour, 
   deleteTour, 
+  checkAvailability,
   searchTours 
 } from "../controllers/tourController";
 
@@ -26,5 +27,7 @@ router.get("/:id", getTour);
 router.post("/", protect, roleAccess("operator"), upload.single("image"), uploadSingleImage, createTour);
 router.put("/:id", protect, roleAccess("operator"), upload.single("image"), uploadSingleImage, updateTour);
 router.delete("/:id", protect, roleAccess("operator"), deleteTour);
+
+router.get("/:id/availability", checkAvailability);
 
 export default router;

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Tour from "../models/Tour";
+import Booking from "../models/Booking"
 
 // CREATE TOUR
 export const createTour = async (
@@ -175,6 +176,41 @@ export const deleteTour = async (
 
     await tour.deleteOne();
     res.json({ success: true, message: "Tour deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkAvailability = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { date } = req.query;
+    const tour = await Tour.findById(req.params.id);
+
+    if (!tour) {
+      return res.status(404).json({ success: false, message: "Tour not found" });
+    }
+
+    if (!date) {
+      return res.status(400).json({ success: false, message: "date is required" });
+    }
+
+    const bookings = await Booking.find({
+      tourId: tour._id,
+      bookingDate: new Date(date as string),
+      status: { $in: ["pending", "accepted"] }
+    });
+
+    const bookedSlots = bookings.reduce(
+      (sum, booking) => sum + booking.participants,
+      0
+    );
+
+    res.json({
+      success: true,
+      maxGroupSize: tour.maxGroupSize,
+      bookedSlots,
+      availableSlots: tour.maxGroupSize - bookedSlots
+    });
   } catch (error) {
     next(error);
   }
