@@ -75,7 +75,7 @@ export const requestBooking = async (
             status: "pending",
         });
 
-        // 🔔 Notification: Inform operator of new booking request
+        // 🔔 Notify operator
         await createNotification({
             user: tour.createdBy.toString(),
             title: "New Booking Request",
@@ -176,7 +176,7 @@ export const updateBookingStatus = async (
         booking.status = status;
         await booking.save();
 
-        // 🔔 Notification: Inform user about booking acceptance/rejection
+        // 🔔 Notify user
         await createNotification({
             user: booking.userId.toString(),
             title: "Booking Update",
@@ -205,7 +205,7 @@ export const cancelBooking = async (
                 .json({ success: false, message: "Invalid booking id" });
         }
 
-        const booking = await Booking.findById(bookingId);
+        const booking = await Booking.findById(bookingId).populate("tourId");
 
         if (!booking) {
             return res.status(404).json({ success: false, message: "Booking not found" });
@@ -225,11 +225,12 @@ export const cancelBooking = async (
         booking.status = "cancelled";
         await booking.save();
 
-        // 🔔 Notification: Inform user about cancellation (optional, can notify operator too)
+        // 🔔 Notify operator about cancellation
+        const tour = booking.tourId as any;
         await createNotification({
-            user: booking.userId.toString(),
+            user: tour.createdBy.toString(),
             title: "Booking Cancelled",
-            message: `Your booking for "${booking.tourId}" has been cancelled.`,
+            message: `${req.user!.name} has cancelled their booking for "${tour.title}".`,
             type: "booking"
         });
 
@@ -237,5 +238,4 @@ export const cancelBooking = async (
     } catch (error) {
         next(error);
     }
-
 };
