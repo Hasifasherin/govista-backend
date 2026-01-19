@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Booking from "../models/Booking";
 import Tour from "../models/Tour";
+import { createNotification } from "../utils/notificationHelper";
 
 //  REQUEST BOOKING (USER)
 export const requestBooking = async (
@@ -23,7 +24,6 @@ export const requestBooking = async (
                 message: "participants must be at least 1"
             });
         }
-
 
         if (!mongoose.Types.ObjectId.isValid(tourId)) {
             return res.status(400).json({ success: false, message: "Invalid tour id" });
@@ -47,6 +47,7 @@ export const requestBooking = async (
                 .status(400)
                 .json({ success: false, message: "Booking already exists" });
         }
+
         // Calculate already booked participants for this tour & date
         const existingBookings = await Booking.find({
             tourId,
@@ -66,13 +67,20 @@ export const requestBooking = async (
             });
         }
 
-
         const booking = await Booking.create({
             tourId,
             userId: req.user!.id,
             bookingDate,
             participants,
             status: "pending",
+        });
+
+        // 🔔 Notification: Inform operator of new booking request
+        await createNotification({
+            user: tour.createdBy.toString(),
+            title: "New Booking Request",
+            message: `A new booking request was made for your tour "${tour.title}".`,
+            type: "booking"
         });
 
         res.status(201).json({ success: true, booking });
@@ -168,6 +176,14 @@ export const updateBookingStatus = async (
         booking.status = status;
         await booking.save();
 
+        // 🔔 Notification: Inform user about booking acceptance/rejection
+        await createNotification({
+            user: booking.userId.toString(),
+            title: "Booking Update",
+            message: `Your booking for "${tour.title}" was ${status}.`,
+            type: "booking"
+        });
+
         res.json({ success: true, booking });
     } catch (error) {
         next(error);
@@ -208,6 +224,14 @@ export const cancelBooking = async (
 
         booking.status = "cancelled";
         await booking.save();
+
+        // 🔔 Notification: Inform user about cancellation (optional, can notify operator too)
+        await createNotification({
+            user: booking.userId.toString(),
+            title: "Booking Cancelled",
+            message: `Your booking for "${booking.tourId}" has been cancelled.`,
+            type: "booking"
+        });
 
         res.json({ success: true, booking });
     } catch (error) {
