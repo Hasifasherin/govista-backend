@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import Review from "../models/Review";
 import Tour from "../models/Tour";
+import Booking from "../models/Booking";
 import mongoose from "mongoose";
 
 // Helper: Recalculate average rating and reviews count for a tour
@@ -27,7 +28,7 @@ const updateTourRating = async (tourId: string) => {
   }
 };
 
-// 1️⃣ Create Review
+//  Create Review
 export const createReview = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
   try {
     const { tourId, rating, comment } = req.body;
@@ -44,6 +45,22 @@ export const createReview = async (req: Request & { user?: any }, res: Response,
     const existing = await Review.findOne({ tourId, userId: req.user!.id });
     if (existing) return res.status(400).json({ success: false, message: "You already reviewed this tour" });
 
+    //  Check if user has an accepted booking and completed the tour
+    const now = new Date();
+    const booking = await Booking.findOne({
+      tourId,
+      userId: req.user!.id,
+      status: "accepted",
+      bookingDate: { $lt: now },
+    });
+
+    if (!booking) {
+      return res.status(400).json({
+        success: false,
+        message: "You can only review tours you have booked and completed",
+      });
+    }
+
     const review = await Review.create({
       tourId,
       userId: req.user!.id,
@@ -51,7 +68,7 @@ export const createReview = async (req: Request & { user?: any }, res: Response,
       comment,
     });
 
-    // ✅ Update tour rating after creating review
+    //  Update tour rating after creating review
     await updateTourRating(tourId);
 
     res.status(201).json({ success: true, review });
@@ -60,7 +77,7 @@ export const createReview = async (req: Request & { user?: any }, res: Response,
   }
 };
 
-// 2️⃣ Get all reviews for a tour
+//  Get all reviews for a tour
 export const getTourReviews = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tourId } = req.params;
@@ -74,7 +91,7 @@ export const getTourReviews = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-// 3️⃣ Update review (user only)
+//  Update review (user only)
 export const updateReview = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -90,7 +107,7 @@ export const updateReview = async (req: Request & { user?: any }, res: Response,
 
     await review.save();
 
-    // ✅ Update tour rating after updating review
+    //  Update tour rating after updating review
     await updateTourRating(review.tourId.toString());
 
     res.json({ success: true, review });
@@ -99,7 +116,7 @@ export const updateReview = async (req: Request & { user?: any }, res: Response,
   }
 };
 
-// 4️⃣ Delete review (user only)
+//  Delete review (user only)
 export const deleteReview = async (req: Request & { user?: any }, res: Response, next: NextFunction) => {
   try {
     const review = await Review.findById(req.params.id);
@@ -111,7 +128,7 @@ export const deleteReview = async (req: Request & { user?: any }, res: Response,
 
     await review.deleteOne();
 
-    // ✅ Update tour rating after deleting review
+    //  Update tour rating after deleting review
     await updateTourRating(review.tourId.toString());
 
     res.json({ success: true, message: "Review deleted successfully" });

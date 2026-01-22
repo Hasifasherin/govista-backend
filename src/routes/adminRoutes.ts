@@ -6,7 +6,7 @@ import {
   getAllOperators,getAllBookings,getBookingDetails,
   updateOperatorStatus,getAllTours,updateTourApproval,toggleTourActive,toggleTourFeatured
 } from "../controllers/adminController";
-import { getAllMessages } from "../controllers/messageController";
+import { toggleOperatorBlock } from "../controllers/adminController";
 const router = express.Router();
 
 // Protect all routes with admin JWT
@@ -19,6 +19,7 @@ router.put("/users/:id/block", toggleUserBlock);
 // Operators
 router.get("/operators", getAllOperators);
 router.put("/operators/:id/status", updateOperatorStatus);
+router.put("/operators/:id/block", toggleOperatorBlock);
 
 // Tours
 router.get("/tours", getAllTours);

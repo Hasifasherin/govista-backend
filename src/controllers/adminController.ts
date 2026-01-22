@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import User from "../models/User";
 import Tour from "../models/Tour";
 import Booking from "../models/Booking";
+import Review from "../models/Review";
 
 
 //  Get All Users
@@ -41,6 +42,39 @@ export const getAllOperators = async (req: Request, res: Response, next: NextFun
   }
 };
 
+// BLOCK / UNBLOCK OPERATOR
+export const toggleOperatorBlock = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const operator = await User.findById(req.params.id).select("role isBlocked");
+
+    if (!operator || operator.role !== "operator") {
+      return res.status(404).json({
+        success: false,
+        message: "Operator not found"
+      });
+    }
+
+    const updatedOperator = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { isBlocked: !operator.isBlocked } },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: updatedOperator!.isBlocked
+        ? "Operator blocked successfully"
+        : "Operator unblocked successfully",
+      operator: updatedOperator
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 //  Approve / Suspend Operator
 export const updateOperatorStatus = async (req: Request, res: Response, next: NextFunction) => {
@@ -50,7 +84,7 @@ export const updateOperatorStatus = async (req: Request, res: Response, next: Ne
       return res.status(404).json({ success: false, message: "Operator not found" });
     }
 
-    const { isApproved } = req.body; 
+    const { isApproved } = req.body;
     if (typeof isApproved !== "boolean") {
       return res.status(400).json({ success: false, message: "isApproved must be boolean" });
     }
@@ -176,36 +210,182 @@ export const getBookingDetails = async (
 };
 
 //analytic 
-export const getDashboardStats = async (req: Request, res: Response, next: NextFunction) => {
+export const getDashboardStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+
+    // TOTAL COUNTS
     const totalUsers = await User.countDocuments({ role: "user" });
     const totalOperators = await User.countDocuments({ role: "operator" });
     const totalBookings = await Booking.countDocuments();
-    
-    const bookingsByStatus = await Booking.aggregate([
-      { $group: { _id: "$status", count: { $sum: 1 } } }
+
+    // NEW USERS & OPERATORS
+    const newUsers = await User.countDocuments({
+      role: "user",
+      createdAt: { $gte: last30Days }
+    });
+
+    const newOperators = await User.countDocuments({
+      role: "operator",
+      createdAt: { $gte: last30Days }
+    });
+
+    // Total reviews count
+    const totalReviews = await Review.countDocuments();
+
+    // Average rating
+    const averageRatingAgg = await Review.aggregate([
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: "$rating" }
+        }
+      }
     ]);
 
-    const topDestinations = await Booking.aggregate([
-      { $lookup: { from: "tours", localField: "tourId", foreignField: "_id", as: "tour" } },
+    const averageRating =
+      averageRatingAgg.length > 0
+        ? Number(averageRatingAgg[0].avgRating.toFixed(1))
+        : 0;
+
+    // Rating distribution (for bar / pie chart)
+    const ratingDistribution = await Review.aggregate([
+      {
+        $group: {
+          _id: "$rating",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Top rated tours
+    const topRatedTours = await Review.aggregate([
+      {
+        $group: {
+          _id: "$tourId",
+          averageRating: { $avg: "$rating" },
+          totalReviews: { $sum: 1 }
+        }
+      },
+      { $sort: { averageRating: -1 } },
+      { $limit: 5 },
+      {
+        $lookup: {
+          from: "tours",
+          localField: "_id",
+          foreignField: "_id",
+          as: "tour"
+        }
+      },
       { $unwind: "$tour" },
-      { $group: { _id: "$tour.location", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
+      {
+        $project: {
+          title: "$tour.title",
+          averageRating: 1,
+          totalReviews: 1
+        }
+      }
+    ]);
+
+    // Recent reviews (for admin moderation)
+    const recentReviews = await Review.find()
+      .populate("userId", "firstName lastName email")
+      .populate("tourId", "title")
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // BOOKING TREND (CHART)
+    const bookingTrends = await Booking.aggregate([
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // TOP AGENCIES BY BOOKINGS
+    const topAgencies = await Booking.aggregate([
+      { $match: { status: "accepted" } },
+      {
+        $lookup: {
+          from: "tours",
+          localField: "tourId",
+          foreignField: "_id",
+          as: "tour"
+        }
+      },
+      { $unwind: "$tour" },
+      {
+        $group: {
+          _id: "$tour.createdBy",
+          totalBookings: { $sum: 1 }
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "operator"
+        }
+      },
+      { $unwind: "$operator" },
+      {
+        $project: {
+          operatorName: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ["$operator.firstName", ""] },
+                  " ",
+                  { $ifNull: ["$operator.lastName", ""] }
+                ]
+              }
+            }
+          },
+          email: "$operator.email",
+          totalBookings: 1
+        }
+      },
+      { $sort: { totalBookings: -1 } },
       { $limit: 5 }
     ]);
 
     res.json({
       success: true,
-      totalUsers,
-      totalOperators,
-      totalBookings,
-      bookingsByStatus,
-      topDestinations
+      totals: {
+        totalUsers,
+        totalOperators,
+        totalBookings,
+        newUsers,
+        newOperators
+      },
+      bookingTrends,
+      topAgencies,
+      reviews: {
+        totalReviews,
+        averageRating,
+        ratingDistribution,
+        topRatedTours,
+        recentReviews
+      }
     });
+
   } catch (error) {
     next(error);
   }
 };
+
 
 //calender 
 //  Monthly Calendar Bookings
@@ -250,3 +430,4 @@ export const getUpcomingTrips = async (_req: Request, res: Response, next: NextF
     next(error);
   }
 };
+

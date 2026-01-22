@@ -1,13 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import User from "../models/User";
 
 interface JwtPayload {
   id: string;
-  role: string;
+  role: "user" | "operator" | "admin";
 }
 
-export const protect = (
-  req: Request & { user?: JwtPayload },
+export const protect = async (
+  req: Request & { user?: any },
   res: Response,
   next: NextFunction
 ) => {
@@ -15,7 +16,10 @@ export const protect = (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Not authorized, no token" });
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized, no token"
+      });
     }
 
     const token = authHeader.split(" ")[1];
@@ -25,26 +29,61 @@ export const protect = (
       process.env.JWT_SECRET as string
     ) as JwtPayload;
 
-    req.user = decoded;
+    // Fetch full user from DB
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // ❌ BLOCKED USER CHECK (VERY IMPORTANT)
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been blocked by admin"
+      });
+    }
+
+    // ❌ OPERATOR NOT APPROVED CHECK
+    if (user.role === "operator" && !user.isApproved) {
+      return res.status(403).json({
+        success: false,
+        message: "Operator account is not approved yet"
+      });
+    }
+
+    req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ message: "Not authorized, token failed" });
+    return res.status(401).json({
+      success: false,
+      message: "Not authorized, token failed"
+    });
   }
 };
 
-//role based
+// ROLE-BASED ACCESS
 export const roleAccess = (role: "user" | "operator" | "admin") => {
   return (
-    req: Request & { user?: JwtPayload },
+    req: Request & { user?: any },
     res: Response,
     next: NextFunction
   ) => {
     if (!req.user) {
-      return res.status(401).json({ message: "Not authorized" });
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized"
+      });
     }
 
     if (req.user.role !== role) {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied"
+      });
     }
 
     next();

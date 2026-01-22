@@ -9,17 +9,40 @@ const createError = (message: string, statusCode: number) => {
   return err;
 };
 
-// REGISTER
+// ================= REGISTER =================
 export const register = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      gender,
+      dob,
+      role,
+      password
+    } = req.body;
 
-    if (!name || !email || !password) {
+    // ✅ Required field validation (UI aligned)
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !phone ||
+      !gender ||
+      !dob ||
+      !password
+    ) {
       throw createError("All fields are required", 400);
+    }
+
+    // ✅ Role validation (ONLY user / operator allowed)
+    if (role && !["user", "operator"].includes(role)) {
+      throw createError("Invalid role", 400);
     }
 
     const normalizedEmail = email.toLowerCase();
@@ -29,11 +52,15 @@ export const register = async (
       throw createError("User already exists", 400);
     }
 
-    // 🚫 role is NOT accepted from request
     const user = await User.create({
-      name,
+      firstName,
+      lastName,
       email: normalizedEmail,
+      phone,
+      gender,
+      dob,
       password,
+      role: role || "user" // default safe fallback
     });
 
     const token = generateToken(user._id.toString(), user.role);
@@ -43,10 +70,11 @@ export const register = async (
       token,
       user: {
         id: user._id,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
-        role: user.role,
-      },
+        role: user.role
+      }
     });
   } catch (error) {
     next(error);

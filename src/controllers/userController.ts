@@ -17,7 +17,7 @@ export const updateProfile = async (
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    const { name, email, password } = req.body;
+    const { firstName, lastName, email, password } = req.body;
 
     if (email) {
       const normalizedEmail = email.toLowerCase();
@@ -38,7 +38,8 @@ export const updateProfile = async (
       user.email = normalizedEmail;
     }
 
-    if (name) user.name = name;
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
 
     if (password && password.trim() !== "") {
       user.password = password; // hashed by pre-save hook
@@ -50,7 +51,8 @@ export const updateProfile = async (
       success: true,
       user: {
         id: user._id,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         role: user.role,
       },
@@ -108,7 +110,7 @@ export const removeFromWishlist = async (
   next: NextFunction
 ) => {
   try {
-    const tourId  = String(req.params.tourId);
+    const tourId = String(req.params.tourId);
 
     if (!mongoose.Types.ObjectId.isValid(tourId)) {
       return res.status(400).json({ success: false, message: "Invalid tourId" });
