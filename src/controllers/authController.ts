@@ -23,26 +23,27 @@ export const register = async (
       phone,
       gender,
       dob,
-      role,
-      password
+      role, 
+      password,
+      confirmPassword, 
     } = req.body;
 
-    // ✅ Required field validation (UI aligned)
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !phone ||
-      !gender ||
-      !dob ||
-      !password
-    ) {
+    // ✅ Required field validation
+    if (!firstName || !lastName || !email || !phone || !gender || !dob || !password || !confirmPassword) {
       throw createError("All fields are required", 400);
     }
 
+    // ✅ Password confirmation validation
+    if (password !== confirmPassword) {
+      throw createError("Passwords do not match", 400);
+    }
+
     // ✅ Role validation (ONLY user / operator allowed)
-    if (role && !["user", "operator"].includes(role)) {
-      throw createError("Invalid role", 400);
+    const allowedRoles = ["user", "operator"];
+    const selectedRole = role || "user"; // default to user if none selected
+
+    if (!allowedRoles.includes(selectedRole)) {
+      throw createError("Invalid role selected", 400);
     }
 
     const normalizedEmail = email.toLowerCase();
@@ -60,13 +61,14 @@ export const register = async (
       gender,
       dob,
       password,
-      role: role || "user" // default safe fallback
+      role: selectedRole // <- use selected role
     });
 
     const token = generateToken(user._id.toString(), user.role);
 
     res.status(201).json({
       success: true,
+      message: "Registration successful",
       token,
       user: {
         id: user._id,
@@ -82,8 +84,7 @@ export const register = async (
 };
 
 
-// LOGIN
-
+// ================= LOGIN =================
 export const login = async (
   req: Request,
   res: Response,
@@ -97,17 +98,23 @@ export const login = async (
     }
 
     const normalizedEmail = email.toLowerCase();
-
-    // password is select:false → must explicitly select
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
     if (!user) {
-      throw createError("Invalid credentials", 400);
+      throw createError("user not found ", 400);
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw createError("Invalid credentials", 400);
+      throw createError("Invalid email or password", 401);
+    }
+
+    if (user.isBlocked) {
+      throw createError("Your account has been blocked", 403);
+    }
+
+    if (user.role === "operator" && !user.isApproved) {
+      throw createError("Operator account is not approved yet", 403);
     }
 
     const token = generateToken(user._id.toString(), user.role);
@@ -115,7 +122,15 @@ export const login = async (
     res.status(200).json({
       success: true,
       token,
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role
+      }
     });
+
   } catch (error) {
     next(error);
   }
