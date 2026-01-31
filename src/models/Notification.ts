@@ -5,25 +5,29 @@ const notificationSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
     title: {
       type: String,
-      required: true
+      required: true,
     },
     message: {
       type: String,
-      required: true
+      required: true,
     },
     type: {
       type: String,
       enum: ["booking", "payment", "system"],
-      default: "system"
+      default: "system",
     },
     isRead: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed, // For actionable data (e.g., bookingId, tourId)
+      default: {},
+    },
   },
   { timestamps: true }
 );

@@ -8,14 +8,12 @@ export const getMyNotifications = async (
   next: NextFunction
 ) => {
   try {
-    const notifications = await Notification.find({
-      user: req.user!.id
-    }).sort({ createdAt: -1 });
+    const notifications = await Notification.find({ user: req.user!.id }).sort({ createdAt: -1 });
 
-    res.json({
+    res.status(200).json({
       success: true,
       count: notifications.length,
-      notifications
+      notifications,
     });
   } catch (error) {
     next(error);
@@ -35,7 +33,14 @@ export const markAsRead = async (
       { new: true }
     );
 
-    res.json({ success: true, notification });
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+
+    res.status(200).json({ success: true, notification });
   } catch (error) {
     next(error);
   }
