@@ -219,7 +219,7 @@ export const checkAvailability = async (req: Request, res: Response, next: NextF
   }
 };
 
-// SEARCH & FILTER TOURS
+// ----------------- SEARCH & FILTER -----------------
 export const searchTours = async (
   req: Request,
   res: Response,
@@ -234,38 +234,24 @@ export const searchTours = async (
       minDuration,
       maxDuration,
       date,
-      category, // ADD THIS LINE for category filter
+      category,
     } = req.query;
 
     const filter: any = {};
 
-    if (title) {
-      filter.title = { $regex: title, $options: "i" };
-    }
-
-    if (location) {
-      filter.location = { $regex: location, $options: "i" };
-    }
-
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
-    }
-
-    if (minDuration || maxDuration) {
-      filter.duration = {};
-      if (minDuration) filter.duration.$gte = Number(minDuration);
-      if (maxDuration) filter.duration.$lte = Number(maxDuration);
-    }
+    if (title) filter.title = { $regex: title, $options: "i" };
+    if (location) filter.location = { $regex: location, $options: "i" };
+    if (minPrice || maxPrice) filter.price = {};
+    if (minPrice) filter.price.$gte = Number(minPrice);
+    if (maxPrice) filter.price.$lte = Number(maxPrice);
+    if (minDuration || maxDuration) filter.duration = {};
+    if (minDuration) filter.duration.$gte = Number(minDuration);
+    if (maxDuration) filter.duration.$lte = Number(maxDuration);
+    if (category) filter.category = category;
 
     if (date) {
-      const searchDate = new Date(date as string);
-      filter.availableDates = { $elemMatch: { $eq: searchDate } };
-    }
-
-    if (category) {
-      filter.category = category;
+      const normalizedDate = new Date(date as string);
+      filter.availableDates = { $elemMatch: { $eq: normalizedDate } };
     }
 
     const tours = await Tour.find(filter)
