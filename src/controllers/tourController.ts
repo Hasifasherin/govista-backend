@@ -23,6 +23,7 @@ export const createTour = async (
       maxGroupSize,
       availableDates,
       image,
+      category, // ADD THIS LINE
     } = req.body;
 
     const tour = await Tour.create({
@@ -34,6 +35,7 @@ export const createTour = async (
       maxGroupSize,
       availableDates,
       image,
+      category, // ADD THIS LINE
       createdBy: req.user!.id,
     });
 
@@ -136,6 +138,7 @@ export const updateTour = async (
       "maxGroupSize",
       "availableDates",
       "image",
+      "category", // ADD THIS LINE
     ];
 
     allowedFields.forEach((field) => {
@@ -231,6 +234,7 @@ export const searchTours = async (
       minDuration,
       maxDuration,
       date,
+      category, // ADD THIS LINE for category filter
     } = req.query;
 
     const filter: any = {};
@@ -258,6 +262,10 @@ export const searchTours = async (
     if (date) {
       const searchDate = new Date(date as string);
       filter.availableDates = { $elemMatch: { $eq: searchDate } };
+    }
+
+    if (category) {
+      filter.category = category;
     }
 
     const tours = await Tour.find(filter)

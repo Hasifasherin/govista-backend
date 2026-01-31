@@ -27,6 +27,11 @@ const tourSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
+    category: {
+      type: String,
+      enum: ["adventure", "cultural", "nature", "food", "historical", "sports", "relaxation"],
+      default: "adventure"
+    },
     availableDates: [
       {
         type: Date,
@@ -43,8 +48,11 @@ const tourSchema = new mongoose.Schema(
     },
     averageRating: { type: Number, default: 0 },
     reviewsCount: { type: Number, default: 0 },
-     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
-
+    status: { 
+      type: String, 
+      enum: ["pending", "approved", "rejected"], 
+      default: "pending" 
+    },
     isActive: { type: Boolean, default: true },
     isFeatured: { type: Boolean, default: false },
   },
