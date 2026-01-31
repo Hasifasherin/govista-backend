@@ -3,9 +3,13 @@ import Stripe from "stripe";
 import Booking from "../models/Booking";
 import { createNotification } from "../utils/notificationHelper";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: "2025-12-15.clover"
+});
 
-// Create Payment Intent
+// -------------------------
+// CREATE PAYMENT INTENT
+// -------------------------
 export const createPaymentIntent = async (
   req: Request & { user?: any },
   res: Response,
@@ -28,7 +32,13 @@ export const createPaymentIntent = async (
       return res.status(400).json({ success: false, message: "Booking cannot be paid" });
     }
 
-    const amount = (booking.tourId as any).price * 100; // convert to cents
+    // Store price snapshot if missing
+    if (!booking.priceAtBooking) {
+      booking.priceAtBooking = (booking.tourId as any).price;
+      await booking.save();
+    }
+
+    const amount = booking.priceAtBooking * 100; // in cents
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
@@ -42,7 +52,9 @@ export const createPaymentIntent = async (
   }
 };
 
-// Stripe Webhook
+// -------------------------
+// STRIPE WEBHOOK
+// -------------------------
 export const stripeWebhook = async (
   req: Request,
   res: Response,
@@ -60,27 +72,31 @@ export const stripeWebhook = async (
       event = stripe.webhooks.constructEvent(
         req.body as Buffer,
         sig as string,
-        endpointSecret as string
+        endpointSecret
       );
     } catch (err: any) {
-      console.log(err);
+      console.error("Stripe Webhook Error:", err.message);
       return res.status(400).send(`Webhook error: ${err.message}`);
     }
 
+    // idempotent handling: check if booking already paid
     if (event.type === "payment_intent.succeeded") {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const bookingId = paymentIntent.metadata.bookingId;
 
-      const booking = await Booking.findById(bookingId);
-      if (booking) {
+      const booking = await Booking.findById(bookingId).populate("tourId");
+
+      if (booking && booking.paymentStatus !== "paid") {
         booking.status = "accepted";
+        booking.paymentStatus = "paid";
+        booking.amountPaid = paymentIntent.amount_received / 100;
+        booking.stripePaymentIntentId = paymentIntent.id;
         await booking.save();
 
-        // ✅ Corrected notification call
         await createNotification({
           user: booking.userId.toString(),
           title: "Booking Confirmed",
-          message: `Your booking for "${(booking.tourId as any).title}" has been confirmed!`,
+          message: `Your booking for "${(booking.tourId as any)?.title || "the tour"}" has been confirmed!`,
           type: "payment",
         });
       }
