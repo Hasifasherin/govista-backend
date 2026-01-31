@@ -31,17 +31,40 @@ export const createReview = async (
 ) => {
   try {
     const { tourId, rating, comment } = req.body;
+    
+    // ✅ ADDED: Validation for all required fields
     if (!tourId || !rating || !comment) {
-      return res.status(400).json({ success: false, message: "All fields are required" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Tour ID, rating, and comment are required" 
+      });
+    }
+
+    // ✅ ADDED: Rating validation
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Rating must be between 1 and 5" 
+      });
     }
 
     const tour = await Tour.findById(tourId);
-    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+    if (!tour) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Tour not found" 
+      });
+    }
 
     const existing = await Review.findOne({ tourId, userId: req.user!.id });
-    if (existing) return res.status(400).json({ success: false, message: "You already reviewed this tour" });
+    if (existing) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "You already reviewed this tour" 
+      });
+    }
 
-    // Ensure user has completed booking
+    // ✅ IMPROVED: Check if user has completed AND accepted booking
     const now = new Date();
     const booking = await Booking.findOne({
       tourId,
@@ -49,6 +72,7 @@ export const createReview = async (
       status: "accepted",
       bookingDate: { $lt: now },
     });
+    
     if (!booking) {
       return res.status(400).json({
         success: false,
@@ -56,10 +80,26 @@ export const createReview = async (
       });
     }
 
-    const review = await Review.create({ tourId, userId: req.user!.id, rating, comment });
+    const review = await Review.create({ 
+      tourId, 
+      userId: req.user!.id, 
+      rating, 
+      comment 
+    });
+    
     await updateTourRating(tourId);
 
-    res.status(201).json({ success: true, review });
+    res.status(201).json({ 
+      success: true, 
+      review: {
+        ...review.toObject(),
+        user: {
+          firstName: req.user!.firstName,
+          lastName: req.user!.lastName,
+          email: req.user!.email
+        }
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -69,11 +109,47 @@ export const createReview = async (
 export const getTourReviews = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tourId } = req.params;
-    const reviews = await Review.find({ tourId })
+    
+    // ✅ FIXED: Type assertion to string
+    const tourIdString = String(tourId);
+    
+    if (!mongoose.Types.ObjectId.isValid(tourIdString)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid tour ID" 
+      });
+    }
+
+    const reviews = await Review.find({ tourId: tourIdString })
       .populate("userId", "firstName lastName email")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, count: reviews.length, reviews });
+    res.json({ 
+      success: true, 
+      count: reviews.length, 
+      reviews 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ ADDED: Get all reviews by current user
+export const getUserReviews = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const reviews = await Review.find({ userId: req.user!.id })
+      .populate("tourId", "title location image")
+      .sort({ createdAt: -1 });
+
+    res.json({ 
+      success: true, 
+      count: reviews.length, 
+      reviews 
+    });
   } catch (error) {
     next(error);
   }
@@ -86,21 +162,56 @@ export const updateReview = async (
   next: NextFunction
 ) => {
   try {
-    const review = await Review.findById(req.params.id);
-    if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+    const reviewId = String(req.params.id); // ✅ FIXED: Convert to string
+    
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Review not found" 
+      });
+    }
 
     if (review.userId.toString() !== req.user!.id) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied" 
+      });
     }
 
     const { rating, comment } = req.body;
-    if (rating !== undefined) review.rating = rating;
-    if (comment !== undefined) review.comment = comment;
+    
+    // ✅ ADDED: Rating validation on update
+    if (rating !== undefined) {
+      if (rating < 1 || rating > 5) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Rating must be between 1 and 5" 
+        });
+      }
+      review.rating = rating;
+    }
+    
+    if (comment !== undefined) {
+      if (comment.trim().length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Comment cannot be empty" 
+        });
+      }
+      review.comment = comment;
+    }
 
     await review.save();
     await updateTourRating(review.tourId.toString());
 
-    res.json({ success: true, review });
+    res.json({ 
+      success: true, 
+      review: {
+        ...review.toObject(),
+        updatedAt: new Date()
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -113,17 +224,60 @@ export const deleteReview = async (
   next: NextFunction
 ) => {
   try {
-    const review = await Review.findById(req.params.id);
-    if (!review) return res.status(404).json({ success: false, message: "Review not found" });
-
-    if (review.userId.toString() !== req.user!.id) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+    const reviewId = String(req.params.id); // ✅ FIXED: Convert to string
+    
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Review not found" 
+      });
     }
 
-    await review.deleteOne();
-    await updateTourRating(review.tourId.toString());
+    if (review.userId.toString() !== req.user!.id) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied" 
+      });
+    }
 
-    res.json({ success: true, message: "Review deleted successfully" });
+    const tourId = review.tourId.toString();
+    await review.deleteOne();
+    await updateTourRating(tourId);
+
+    res.json({ 
+      success: true, 
+      message: "Review deleted successfully" 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ ADDED: Get single review details
+export const getReviewDetails = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const reviewId = String(req.params.id); // ✅ FIXED: Convert to string
+    
+    const review = await Review.findById(reviewId)
+      .populate("userId", "firstName lastName email")
+      .populate("tourId", "title location");
+
+    if (!review) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Review not found" 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      review 
+    });
   } catch (error) {
     next(error);
   }

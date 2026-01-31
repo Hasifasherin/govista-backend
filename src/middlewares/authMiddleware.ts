@@ -65,8 +65,8 @@ export const protect = async (
   }
 };
 
-// ROLE-BASED ACCESS
-export const roleAccess = (role: "user" | "operator" | "admin") => {
+// ✅ UPDATED: ROLE-BASED ACCESS (Now accepts multiple roles)
+export const roleAccess = (...allowedRoles: ("user" | "operator" | "admin")[]) => {
   return (
     req: Request & { user?: any },
     res: Response,
@@ -79,7 +79,7 @@ export const roleAccess = (role: "user" | "operator" | "admin") => {
       });
     }
 
-    if (req.user.role !== role) {
+    if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: "Access denied"
@@ -89,3 +89,8 @@ export const roleAccess = (role: "user" | "operator" | "admin") => {
     next();
   };
 };
+
+// ✅ ADDED: Optional - Create specific middleware combinations
+export const adminOrOperator = roleAccess("admin", "operator");
+export const adminOrUser = roleAccess("admin", "user");
+export const operatorOrUser = roleAccess("operator", "user");

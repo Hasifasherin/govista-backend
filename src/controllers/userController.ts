@@ -1,10 +1,39 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 import User from "../models/User";
 import Booking from "../models/Booking";
 
 // =======================
-// 1️⃣ Update Profile
+// 1️⃣ Get Current User Profile
+// =======================
+export const getProfile = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const user = await User.findById(req.user!.id)
+      .select("-password -__v"); // Exclude sensitive fields
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
+    }
+
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =======================
+// 2️⃣ Update Profile
 // =======================
 export const updateProfile = async (
   req: Request & { user?: any },
@@ -14,10 +43,13 @@ export const updateProfile = async (
   try {
     const user = await User.findById(req.user!.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
     }
 
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, phone, dob, password } = req.body;
 
     if (email) {
       const normalizedEmail = email.toLowerCase();
@@ -40,8 +72,17 @@ export const updateProfile = async (
 
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
+    if (phone) user.phone = phone;
+    if (dob) user.dob = new Date(dob);
 
     if (password && password.trim() !== "") {
+      // Password validation
+      if (password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 6 characters"
+        });
+      }
       user.password = password; // hashed by pre-save hook
     }
 
@@ -54,7 +95,10 @@ export const updateProfile = async (
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        phone: user.phone,
+        dob: user.dob,
         role: user.role,
+        wishlist: user.wishlist
       },
     });
   } catch (error) {
@@ -63,7 +107,62 @@ export const updateProfile = async (
 };
 
 // =======================
-// 2️⃣ Add to Wishlist
+// 3️⃣ Change Password
+// =======================
+export const changePassword = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required"
+      });
+    }
+
+    const user = await User.findById(req.user!.id).select("+password");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect"
+      });
+    }
+
+    // Validate new password
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters"
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password updated successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =======================
+// 4️⃣ Add to Wishlist
 // =======================
 export const addToWishlist = async (
   req: Request & { user?: any },
@@ -73,12 +172,18 @@ export const addToWishlist = async (
   try {
     const { tourId } = req.body;
     if (!tourId || !mongoose.Types.ObjectId.isValid(tourId)) {
-      return res.status(400).json({ success: false, message: "Invalid tourId" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid tourId" 
+      });
     }
 
     const user = await User.findById(req.user!.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
     }
 
     const alreadyExists = user.wishlist.some(
@@ -95,14 +200,18 @@ export const addToWishlist = async (
     user.wishlist.push(new mongoose.Types.ObjectId(tourId));
     await user.save();
 
-    res.json({ success: true, wishlist: user.wishlist });
+    res.json({ 
+      success: true, 
+      message: "Tour added to wishlist",
+      wishlist: user.wishlist 
+    });
   } catch (error) {
     next(error);
   }
 };
 
 // =======================
-// 3️⃣ Remove from Wishlist
+// 5️⃣ Remove from Wishlist
 // =======================
 export const removeFromWishlist = async (
   req: Request & { user?: any },
@@ -113,12 +222,18 @@ export const removeFromWishlist = async (
     const tourId = String(req.params.tourId);
 
     if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      return res.status(400).json({ success: false, message: "Invalid tourId" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid tourId" 
+      });
     }
 
     const user = await User.findById(req.user!.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
     }
 
     user.wishlist = user.wishlist.filter(
@@ -126,14 +241,18 @@ export const removeFromWishlist = async (
     );
 
     await user.save();
-    res.json({ success: true, wishlist: user.wishlist });
+    res.json({ 
+      success: true, 
+      message: "Tour removed from wishlist",
+      wishlist: user.wishlist 
+    });
   } catch (error) {
     next(error);
   }
 };
 
 // =======================
-// 4️⃣ Get Wishlist
+// 6️⃣ Get Wishlist
 // =======================
 export const getWishlist = async (
   req: Request & { user?: any },
@@ -141,19 +260,34 @@ export const getWishlist = async (
   next: NextFunction
 ) => {
   try {
-    const user = await User.findById(req.user!.id).populate("wishlist");
+    const user = await User.findById(req.user!.id).populate({
+      path: "wishlist",
+      select: "title location price image category duration averageRating",
+      match: { isActive: true, status: "approved" }
+    });
+    
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "User not found" 
+      });
     }
 
-    res.json({ success: true, wishlist: user.wishlist });
+    // Filter out null values
+    const filteredWishlist = user.wishlist.filter(tour => tour !== null);
+
+    res.json({ 
+      success: true, 
+      count: filteredWishlist.length,
+      wishlist: filteredWishlist 
+    });
   } catch (error) {
     next(error);
   }
 };
 
 // =======================
-// 5️⃣ Booking History
+// 7️⃣ Booking History
 // =======================
 export const getBookingHistory = async (
   req: Request & { user?: any },
@@ -162,7 +296,7 @@ export const getBookingHistory = async (
 ) => {
   try {
     const bookings = await Booking.find({ userId: req.user!.id })
-      .populate("tourId", "title location price")
+      .populate("tourId", "title location price image")
       .sort({ createdAt: -1 });
 
     res.json({

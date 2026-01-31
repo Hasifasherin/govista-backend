@@ -103,7 +103,7 @@ export const updateOperatorStatus = async (req: Request, res: Response, next: Ne
 // 1️⃣ Get All Tours
 export const getAllTours = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tours = await Tour.find().populate("createdBy", "name email role");
+    const tours = await Tour.find().populate("createdBy", "firstName lastName email role");
     res.json({ success: true, count: tours.length, tours });
   } catch (error) {
     next(error);
@@ -411,7 +411,22 @@ export const getMonthlyCalendar = async (req: Request, res: Response, next: Next
     next(error);
   }
 };
+// Delete inappropriate review
+export const deleteReview = async (req: Request, res: Response) => {
+  await Review.findByIdAndDelete(req.params.id);
+  res.json({ success: true, message: "Review deleted" });
+};
 
+// Update booking status
+export const updateBookingStatus = async (req: Request, res: Response) => {
+  const { status } = req.body;
+  const booking = await Booking.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true }
+  );
+  res.json({ success: true, booking });
+};
 //  Upcoming Trips
 export const getUpcomingTrips = async (_req: Request, res: Response, next: NextFunction) => {
   try {

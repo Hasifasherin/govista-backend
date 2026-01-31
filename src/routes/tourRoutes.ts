@@ -9,7 +9,9 @@ import {
   updateTour, 
   deleteTour, 
   checkAvailability,
-  searchTours 
+  searchTours,
+  getFeaturedTours,
+  getTourCategories
 } from "../controllers/tourController";
 
 const router = express.Router();
@@ -19,7 +21,8 @@ router.get("/search", searchTours);
 
 // GET all tours
 router.get("/", getTours);
-
+router.get("/featured", getFeaturedTours);
+router.get("/categories", getTourCategories);
 // GET single tour by ID
 router.get("/:id", getTour);
 

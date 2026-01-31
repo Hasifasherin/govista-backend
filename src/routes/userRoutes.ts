@@ -1,7 +1,9 @@
 import express from "express";
-import { protect, roleAccess } from "../middlewares/authMiddleware";
+import { protect } from "../middlewares/authMiddleware";
 import {
+  getProfile,
   updateProfile,
+  changePassword,
   addToWishlist,
   removeFromWishlist,
   getWishlist,
@@ -10,16 +12,19 @@ import {
 
 const router = express.Router();
 
+router.use(protect);
 
-// Update Profile (logged-in user)
-router.put("/profile", protect, roleAccess("user"), updateProfile);
+// Profile
+router.get("/profile", getProfile);
+router.put("/profile", updateProfile);
+router.put("/password", changePassword);
 
-// Wishlist APIs
-router.post("/wishlist", protect, roleAccess("user"), addToWishlist);
-router.get("/wishlist", protect, roleAccess("user"), getWishlist);
-router.delete("/wishlist/:tourId", protect, roleAccess("user"), removeFromWishlist);
+// Wishlist
+router.get("/wishlist", getWishlist);
+router.post("/wishlist", addToWishlist);
+router.delete("/wishlist/:tourId", removeFromWishlist);
 
-// Booking History
-router.get("/bookings", protect, roleAccess("user"), getBookingHistory);
+// Bookings
+router.get("/bookings", getBookingHistory);
 
 export default router;

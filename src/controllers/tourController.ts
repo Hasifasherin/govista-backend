@@ -1,7 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Tour from "../models/Tour";
-import Booking from "../models/Booking"
+import Booking from "../models/Booking";
+
+const createError = (message: string, statusCode: number) => {
+  const err = new Error(message) as any;
+  err.statusCode = statusCode;
+  return err;
+};
 
 // CREATE TOUR
 export const createTour = async (
@@ -23,8 +29,55 @@ export const createTour = async (
       maxGroupSize,
       availableDates,
       image,
-      category, // ADD THIS LINE
+      category,
     } = req.body;
+
+    // ✅ ADDED VALIDATION
+    if (price <= 0) throw createError("Price must be greater than 0", 400);
+    if (duration <= 0) throw createError("Duration must be greater than 0", 400);
+    if (maxGroupSize <= 0) throw createError("Group size must be greater than 0", 400);
+
+    // ✅ FIX: Parse availableDates from FormData string to array
+    let datesArray = [];
+    
+    if (availableDates) {
+      if (typeof availableDates === 'string') {
+        try {
+          // Try to parse as JSON array first (if sent from frontend as JSON string)
+          datesArray = JSON.parse(availableDates);
+        } catch (jsonError) {
+          // If not JSON, handle as comma-separated string from FormData
+          // Remove brackets and quotes if present
+          const cleaned = availableDates.replace(/[\[\]"]/g, '');
+          // Split by comma and trim whitespace
+          datesArray = cleaned.split(',').map(date => date.trim()).filter(date => date.length > 0);
+          
+          // If still empty or single date, treat as array with one item
+          if (datesArray.length === 0) {
+            datesArray = [availableDates.trim()];
+          }
+        }
+      } else if (Array.isArray(availableDates)) {
+        // Already an array (from raw JSON)
+        datesArray = availableDates;
+      }
+    }
+
+    // ✅ Validate availableDates are in future
+    const now = new Date();
+    for (const dateStr of datesArray) {
+      // Handle different date formats
+      let date;
+      if (dateStr.includes('T')) {
+        date = new Date(dateStr); // ISO format with time
+      } else {
+        date = new Date(dateStr + 'T00:00:00'); // Date only, add time
+      }
+      
+      if (date < now) {
+        throw createError(`Date ${dateStr} must be in the future`, 400);
+      }
+    }
 
     const tour = await Tour.create({
       title,
@@ -33,9 +86,9 @@ export const createTour = async (
       location,
       duration,
       maxGroupSize,
-      availableDates,
+      availableDates: datesArray, // ✅ Use the parsed array
       image,
-      category, // ADD THIS LINE
+      category,
       createdBy: req.user!.id,
     });
 
@@ -44,8 +97,7 @@ export const createTour = async (
     next(error);
   }
 };
-
-// GET ALL TOURS (Pagination)
+// GET ALL TOURS (Pagination) - ✅ FIXED: Only show active, approved tours
 export const getTours = async (
   req: Request,
   res: Response,
@@ -56,13 +108,20 @@ export const getTours = async (
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const tours = await Tour.find()
-      .populate("createdBy", "name email role")
+    // ✅ ADDED FILTER: Only show active and approved tours
+    const tours = await Tour.find({ 
+      isActive: true, 
+      status: "approved" 
+    })
+      .populate("createdBy", "firstName lastName email role") // ✅ FIXED populate field
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    const total = await Tour.countDocuments();
+    const total = await Tour.countDocuments({ 
+      isActive: true, 
+      status: "approved" 
+    });
 
     res.json({
       success: true,
@@ -76,9 +135,7 @@ export const getTours = async (
   }
 };
 
-// =======================
 // GET SINGLE TOUR
-// =======================
 export const getTour = async (
   req: Request,
   res: Response,
@@ -93,7 +150,7 @@ export const getTour = async (
 
     const tour = await Tour.findById(tourId).populate(
       "createdBy",
-      "name email role"
+      "firstName lastName email role" // ✅ FIXED populate field
     );
 
     if (!tour) {
@@ -128,7 +185,7 @@ export const updateTour = async (
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    //  Explicit field updates only
+    // Explicit field updates only
     const allowedFields = [
       "title",
       "description",
@@ -138,8 +195,19 @@ export const updateTour = async (
       "maxGroupSize",
       "availableDates",
       "image",
-      "category", // ADD THIS LINE
+      "category",
     ];
+
+    // ✅ ADDED VALIDATION for updated fields
+    if (req.body.price !== undefined && req.body.price <= 0) {
+      throw createError("Price must be greater than 0", 400);
+    }
+    if (req.body.duration !== undefined && req.body.duration <= 0) {
+      throw createError("Duration must be greater than 0", 400);
+    }
+    if (req.body.maxGroupSize !== undefined && req.body.maxGroupSize <= 0) {
+      throw createError("Group size must be greater than 0", 400);
+    }
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
@@ -184,6 +252,7 @@ export const deleteTour = async (
   }
 };
 
+// CHECK AVAILABILITY
 export const checkAvailability = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { date } = req.query;
@@ -197,9 +266,26 @@ export const checkAvailability = async (req: Request, res: Response, next: NextF
       return res.status(400).json({ success: false, message: "date is required" });
     }
 
+    // ✅ ADDED: Check if date is in availableDates
+    const bookingDate = new Date(date as string);
+    const isDateAvailable = tour.availableDates.some(
+      (availableDate) => availableDate.toDateString() === bookingDate.toDateString()
+    );
+
+    if (!isDateAvailable) {
+      return res.json({
+        success: true,
+        available: false,
+        message: "Tour not available on this date",
+        maxGroupSize: tour.maxGroupSize,
+        bookedSlots: 0,
+        availableSlots: 0
+      });
+    }
+
     const bookings = await Booking.find({
       tourId: tour._id,
-      bookingDate: new Date(date as string),
+      bookingDate: bookingDate,
       status: { $in: ["pending", "accepted"] }
     });
 
@@ -208,18 +294,21 @@ export const checkAvailability = async (req: Request, res: Response, next: NextF
       0
     );
 
+    const availableSlots = Math.max(0, tour.maxGroupSize - bookedSlots);
+
     res.json({
       success: true,
+      available: availableSlots > 0,
       maxGroupSize: tour.maxGroupSize,
       bookedSlots,
-      availableSlots: tour.maxGroupSize - bookedSlots
+      availableSlots
     });
   } catch (error) {
     next(error);
   }
 };
 
-// ----------------- SEARCH & FILTER -----------------
+// SEARCH & FILTER - ✅ FIXED: Only show active, approved tours
 export const searchTours = async (
   req: Request,
   res: Response,
@@ -235,9 +324,15 @@ export const searchTours = async (
       maxDuration,
       date,
       category,
+      sortBy, // ✅ ADDED: sorting option
+      sortOrder = "asc" // ✅ ADDED: asc or desc
     } = req.query;
 
-    const filter: any = {};
+    // ✅ ADDED BASE FILTER: Only active, approved tours
+    const filter: any = { 
+      isActive: true, 
+      status: "approved" 
+    };
 
     if (title) filter.title = { $regex: title, $options: "i" };
     if (location) filter.location = { $regex: location, $options: "i" };
@@ -251,14 +346,68 @@ export const searchTours = async (
 
     if (date) {
       const normalizedDate = new Date(date as string);
+      // ✅ ADDED: Check if date is in future
+      const now = new Date();
+      if (normalizedDate < now) {
+        return res.json({ success: true, count: 0, tours: [] });
+      }
       filter.availableDates = { $elemMatch: { $eq: normalizedDate } };
     }
 
+    // ✅ ADDED: Sorting logic
+    let sortOptions: any = { createdAt: -1 };
+    if (sortBy === "price") {
+      sortOptions = { price: sortOrder === "desc" ? -1 : 1 };
+    } else if (sortBy === "duration") {
+      sortOptions = { duration: sortOrder === "desc" ? -1 : 1 };
+    } else if (sortBy === "rating") {
+      sortOptions = { averageRating: sortOrder === "desc" ? -1 : 1 };
+    }
+
     const tours = await Tour.find(filter)
-      .populate("createdBy", "name email role")
+      .populate("createdBy", "firstName lastName email role") // ✅ FIXED populate field
+      .sort(sortOptions);
+
+    res.json({ success: true, count: tours.length, tours });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ ADDED: Featured tours endpoint (for homepage)
+export const getFeaturedTours = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const tours = await Tour.find({ 
+      isFeatured: true, 
+      isActive: true, 
+      status: "approved" 
+    })
+      .populate("createdBy", "firstName lastName email")
+      .limit(6)
       .sort({ createdAt: -1 });
 
     res.json({ success: true, count: tours.length, tours });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ✅ ADDED: Category list endpoint
+export const getTourCategories = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const categories = await Tour.distinct("category", { 
+      isActive: true, 
+      status: "approved" 
+    });
+    res.json({ success: true, categories });
   } catch (error) {
     next(error);
   }

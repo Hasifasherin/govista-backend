@@ -4,9 +4,10 @@ import {
   getAllUsers,getUpcomingTrips,
   toggleUserBlock,getDashboardStats,getMonthlyCalendar,
   getAllOperators,getAllBookings,getBookingDetails,
+  deleteReview,toggleOperatorBlock,    
+  updateBookingStatus,
   updateOperatorStatus,getAllTours,updateTourApproval,toggleTourActive,toggleTourFeatured
 } from "../controllers/adminController";
-import { toggleOperatorBlock } from "../controllers/adminController";
 const router = express.Router();
 
 // Protect all routes with admin JWT
@@ -30,7 +31,8 @@ router.put("/tours/:id/feature", toggleTourFeatured);
 // Bookings (Admin)
 router.get("/bookings", getAllBookings);          
 router.get("/bookings/:id", getBookingDetails);   
-
+router.put("/bookings/:id/status", updateBookingStatus);  
+router.delete("/reviews/:id", deleteReview);             
 //analytic
 router.get("/dashboard", getDashboardStats);
 
