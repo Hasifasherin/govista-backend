@@ -134,6 +134,28 @@ export const deleteNotification = async (
   }
 };
 
+// GET LATEST NOTIFICATIONS (for dropdown)
+export const getLatestNotifications = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const notifications = await Notification.find({
+      user: req.user!.id,
+    })
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.status(200).json({
+      success: true,
+      notifications,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET UNREAD COUNT
 export const getUnreadCount = async (
   req: Request & { user?: any },
