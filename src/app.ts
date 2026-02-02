@@ -12,6 +12,7 @@ import adminRoutes from "./routes/adminRoutes";
 import messageRoutes from "./routes/messageRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
+import sliderRoutes from "./routes/sliderRoutes";
 
 const app = express();
 
@@ -36,6 +37,8 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/sliders", sliderRoutes); // public GET
+
 
 app.use("/api/messages", messageRoutes);
 

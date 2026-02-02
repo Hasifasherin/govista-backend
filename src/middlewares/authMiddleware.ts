@@ -24,10 +24,21 @@ export const protect = async (
 
     const token = authHeader.split(" ")[1];
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET as string
-    ) as JwtPayload;
+    // 🔥 ADD THIS AT TOP OF protect()
+const decoded = jwt.verify(
+  token,
+  process.env.JWT_SECRET as string
+) as JwtPayload;
+
+// ✅ BYPASS FOR ADMIN TOKEN
+if (decoded.role === "admin") {
+  req.user = {
+    id: "admin",
+    role: "admin",
+  };
+  return next();
+}
+
 
     // Fetch full user from DB
     const user = await User.findById(decoded.id);

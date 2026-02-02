@@ -5,4 +5,8 @@ export interface AuthRequest extends Request {
     id: string;
     role: string;
   };
+  admin?: {
+    id: string;
+    role: string;
+  };
 }
