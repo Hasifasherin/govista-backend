@@ -14,7 +14,13 @@ const bookingSchema = new mongoose.Schema(
       required: true
     },
 
-    bookingDate: {
+    operatorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+
+    travelDate: {
       type: Date,
       required: true
     },
@@ -59,8 +65,9 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Indexes
-bookingSchema.index({ tourId: 1, bookingDate: 1 });
+// ✅ Indexes
+bookingSchema.index({ tourId: 1, travelDate: 1 });
+bookingSchema.index({ operatorId: 1, travelDate: 1 });
 bookingSchema.index({ userId: 1 });
 bookingSchema.index({ status: 1 });
 
