@@ -16,40 +16,32 @@ import {
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-/**
- * Public
- */
+// Public – homepage sliders
 router.get("/", getSliders);
 
-/**
- * Admin – create slider
- */
+// Admin – create slider
 router.post(
   "/",
-  protect,                 // ✅ sets req.user
-  roleAccess("admin"),     // ✅ checks admin
+  protect,
+  roleAccess("admin"),
   upload.single("image"),
   validateImage,
   uploadSingleImage,
   createSlider
 );
 
-/**
- * Admin – update slider
- */
+// Admin – update slider 
 router.put(
   "/:id",
   protect,
   roleAccess("admin"),
-  upload.single("image"),
   validateImage,
-  updateImage,
+  uploadSingleImage,   
+  updateImage,      
   updateSlider
 );
 
-/**
- * Admin – delete slider
- */
+// Admin – delete slider
 router.delete(
   "/:id",
   protect,

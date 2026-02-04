@@ -3,10 +3,7 @@ import Slider from "../models/Slider";
 import { AuthRequest } from "../types/authRequest";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload";
 
-/**
- * GET /api/sliders
- * Public – Homepage sliders
- */
+
 export const getSliders = async (_req: Request, res: Response) => {
   try {
     const sliders = await Slider.find().sort({ createdAt: -1 });
@@ -24,10 +21,7 @@ export const getSliders = async (_req: Request, res: Response) => {
   }
 };
 
-/**
- * POST /api/admin/sliders
- * Admin – Create slider
- */
+
 export const createSlider = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -37,17 +31,19 @@ export const createSlider = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    if (!req.body.image || !req.body.imagePublicId) {
+    const { image, imagePublicId } = req.body;
+
+    if (!image || !imagePublicId) {
       return res.status(400).json({
         success: false,
-        message: "Image is required",
+        message: "Image upload failed",
       });
     }
 
     const slider = await Slider.create({
-      imageUrl: req.body.image,
-      imagePublicId: req.body.imagePublicId,
-      createdBy: req.user.id || "admin",
+      imageUrl: image,               
+      imagePublicId: imagePublicId,  
+      createdBy: req.user.id,
     });
 
     res.status(201).json({
@@ -63,10 +59,7 @@ export const createSlider = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * PUT /api/admin/sliders/:id
- * Admin – Update slider
- */
+
 export const updateSlider = async (req: AuthRequest, res: Response) => {
   try {
     const slider = await Slider.findById(req.params.id);
@@ -78,14 +71,17 @@ export const updateSlider = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // If image is updated
-    if (req.body.image && req.body.imagePublicId) {
+    // If new image uploaded
+    if (req.file) {
+      const { path, filename } = req.file as any;
+
+      // delete old image from cloudinary
       if (slider.imagePublicId) {
         await deleteFromCloudinary(slider.imagePublicId);
       }
 
-      slider.imageUrl = req.body.image;
-      slider.imagePublicId = req.body.imagePublicId;
+      slider.imageUrl = path;          
+      slider.imagePublicId = filename; 
     }
 
     await slider.save();
@@ -103,10 +99,6 @@ export const updateSlider = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * DELETE /api/admin/sliders/:id
- * Admin – Delete slider
- */
 export const deleteSlider = async (req: AuthRequest, res: Response) => {
   try {
     const slider = await Slider.findById(req.params.id);

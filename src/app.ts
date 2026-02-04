@@ -37,7 +37,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/operator", operatorRoutes);
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/sliders", sliderRoutes); // public GET
+app.use("/api/sliders", sliderRoutes); 
 
 
 app.use("/api/messages", messageRoutes);

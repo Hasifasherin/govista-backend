@@ -20,7 +20,7 @@ const router = express.Router();
 router.get("/search", searchTours);
 
 // GET all tours
-router.get("/", getTours);
+router.get("/my-tours", protect, roleAccess("operator"), getTours);
 router.get("/featured", getFeaturedTours);
 router.get("/categories", getTourCategories);
 // GET single tour by ID

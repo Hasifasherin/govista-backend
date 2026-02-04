@@ -209,7 +209,7 @@ export const getBookingDetails = async (
   }
 };
 
-//analytic 
+// analytic 
 export const getDashboardStats = async (
   req: Request,
   res: Response,
@@ -219,12 +219,15 @@ export const getDashboardStats = async (
     const last30Days = new Date();
     last30Days.setDate(last30Days.getDate() - 30);
 
-    // TOTAL COUNTS
+    // ================= TOTAL COUNTS =================
     const totalUsers = await User.countDocuments({ role: "user" });
     const totalOperators = await User.countDocuments({ role: "operator" });
     const totalBookings = await Booking.countDocuments();
+    const totalTours = await Tour.countDocuments();
+    const totalActiveTours = await Tour.countDocuments({ isActive: true });
+    const totalFeaturedTours = await Tour.countDocuments({ isFeatured: true });
 
-    // NEW USERS & OPERATORS
+    // ================= NEW USERS & OPERATORS =================
     const newUsers = await User.countDocuments({
       role: "user",
       createdAt: { $gte: last30Days }
@@ -235,10 +238,9 @@ export const getDashboardStats = async (
       createdAt: { $gte: last30Days }
     });
 
-    // Total reviews count
+    // ================= REVIEWS =================
     const totalReviews = await Review.countDocuments();
 
-    // Average rating
     const averageRatingAgg = await Review.aggregate([
       {
         $group: {
@@ -253,7 +255,6 @@ export const getDashboardStats = async (
         ? Number(averageRatingAgg[0].avgRating.toFixed(1))
         : 0;
 
-    // Rating distribution (for bar / pie chart)
     const ratingDistribution = await Review.aggregate([
       {
         $group: {
@@ -264,7 +265,6 @@ export const getDashboardStats = async (
       { $sort: { _id: 1 } }
     ]);
 
-    // Top rated tours
     const topRatedTours = await Review.aggregate([
       {
         $group: {
@@ -293,14 +293,13 @@ export const getDashboardStats = async (
       }
     ]);
 
-    // Recent reviews (for admin moderation)
     const recentReviews = await Review.find()
       .populate("userId", "firstName lastName email")
       .populate("tourId", "title")
       .sort({ createdAt: -1 })
       .limit(5);
 
-    // BOOKING TREND (CHART)
+    // ================= BOOKING TREND =================
     const bookingTrends = await Booking.aggregate([
       {
         $group: {
@@ -313,7 +312,7 @@ export const getDashboardStats = async (
       { $sort: { _id: 1 } }
     ]);
 
-    // TOP AGENCIES BY BOOKINGS
+    // ================= TOP AGENCIES =================
     const topAgencies = await Booking.aggregate([
       { $match: { status: "accepted" } },
       {
@@ -361,12 +360,16 @@ export const getDashboardStats = async (
       { $limit: 5 }
     ]);
 
+    // ================= RESPONSE =================
     res.json({
       success: true,
       totals: {
         totalUsers,
         totalOperators,
         totalBookings,
+        totalTours,
+        totalActiveTours,
+        totalFeaturedTours,
         newUsers,
         newOperators
       },
@@ -385,6 +388,7 @@ export const getDashboardStats = async (
     next(error);
   }
 };
+
 
 
 //calender 

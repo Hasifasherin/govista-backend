@@ -97,9 +97,9 @@ export const createTour = async (
     next(error);
   }
 };
-// GET ALL TOURS (Pagination) - ✅ FIXED: Only show active, approved tours
+// GET ALL TOURS (Pagination)
 export const getTours = async (
-  req: Request,
+  req: Request & { user?: any },
   res: Response,
   next: NextFunction
 ) => {
@@ -108,20 +108,27 @@ export const getTours = async (
     const limit = Number(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // ✅ ADDED FILTER: Only show active and approved tours
-    const tours = await Tour.find({ 
-      isActive: true, 
-      status: "approved" 
-    })
-      .populate("createdBy", "firstName lastName email role") // ✅ FIXED populate field
+    let filter: any = { isActive: true };
+
+    // Operator/admin route
+    if (req.user) {
+      if (req.user.role === "operator") {
+        filter.createdBy = req.user.id; // show all their tours
+      } else if (req.user.role === "admin") {
+        // admin sees all tours
+      }
+    } else {
+      // Public: only approved tours
+      filter.status = "approved";
+    }
+
+    const tours = await Tour.find(filter)
+      .populate("createdBy", "firstName lastName email role")
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    const total = await Tour.countDocuments({ 
-      isActive: true, 
-      status: "approved" 
-    });
+    const total = await Tour.countDocuments(filter);
 
     res.json({
       success: true,
@@ -134,6 +141,7 @@ export const getTours = async (
     next(error);
   }
 };
+
 
 // GET SINGLE TOUR
 export const getTour = async (

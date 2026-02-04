@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { 
-  uploadToCloudinary, 
-  deleteFromCloudinary 
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary
 } from "../utils/cloudinaryUpload";
 
 // Image validation middleware
@@ -11,7 +11,7 @@ export const validateImage = (
   next: NextFunction
 ) => {
   if (!req.file) return next();
-  
+
   // Check file size (max 5MB)
   const maxSize = 5 * 1024 * 1024; // 5MB
   if (req.file.size > maxSize) {
@@ -20,7 +20,7 @@ export const validateImage = (
       message: "Image size should be less than 5MB"
     });
   }
-  
+
   // Check file type
   const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp", "image/gif"];
   if (!allowedMimes.includes(req.file.mimetype)) {
@@ -29,7 +29,7 @@ export const validateImage = (
       message: "Only JPEG, PNG, JPG, WebP, and GIF images are allowed"
     });
   }
-  
+
   next();
 };
 
@@ -47,7 +47,7 @@ export const uploadSingleImage = async (
     // Determine folder based on route/context
     let folder = "general";
     let publicId = "";
-    
+
     if (req.baseUrl.includes("/api/tours")) {
       folder = "tours";
       if (req.params.id) {
@@ -62,6 +62,11 @@ export const uploadSingleImage = async (
         publicId = `user-${req.user.id}-${Date.now()}`;
       }
     }
+    else if (req.baseUrl.includes("/api/sliders")) {
+      folder = "sliders";
+      publicId = `slider-${Date.now()}`;
+    }
+
     else if (req.baseUrl.includes("/api/operators")) {
       folder = "operators";
       if (req.user) {
@@ -86,7 +91,7 @@ export const uploadSingleImage = async (
     // Attach image info to request
     req.body.image = result.secure_url;
     req.body.imagePublicId = result.public_id;
-    
+
     // Store in req.file for reference
     (req.file as any).cloudinaryUrl = result.secure_url;
     (req.file as any).publicId = result.public_id;
@@ -94,7 +99,7 @@ export const uploadSingleImage = async (
     next();
   } catch (error: any) {
     console.error("Image upload error:", error);
-    
+
     // Provide user-friendly error messages
     if (error.message.includes("File size too large")) {
       return res.status(400).json({
@@ -102,14 +107,14 @@ export const uploadSingleImage = async (
         message: "Image file is too large. Maximum size is 5MB."
       });
     }
-    
+
     if (error.message.includes("Invalid image")) {
       return res.status(400).json({
         success: false,
         message: "Invalid image file. Please upload a valid image."
       });
     }
-    
+
     // Generic error
     return res.status(500).json({
       success: false,
@@ -132,34 +137,26 @@ export const deleteImageMiddleware = async (
 
 // Update image middleware (delete old, upload new)
 export const updateImage = async (
-  req: Request & { user?: any },
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    // If no new file, just continue
-    if (!req.file) {
+    if (!req.body.image || !req.body.imagePublicId) {
       return next();
     }
 
-    // Get old publicId from request or body
-    const oldPublicId = req.body.oldImagePublicId || req.params.imagePublicId;
-    
-    // Upload new image
-    await uploadSingleImage(req, res, async () => {
-      // If new image uploaded successfully and we have old publicId, delete old image
-      if (oldPublicId && req.body.imagePublicId !== oldPublicId) {
-        try {
-          await deleteFromCloudinary(oldPublicId);
-          console.log(`Deleted old image: ${oldPublicId}`);
-        } catch (deleteError) {
-          // Don't fail the request if deletion fails, just log it
-          console.error(`Failed to delete old image ${oldPublicId}:`, deleteError);
-        }
+    const oldPublicId = req.body.oldImagePublicId;
+
+    if (oldPublicId && oldPublicId !== req.body.imagePublicId) {
+      try {
+        await deleteFromCloudinary(oldPublicId);
+      } catch (err) {
+        console.error("Failed to delete old image:", err);
       }
-      next();
-    });
-    
+    }
+
+    next();
   } catch (error) {
     next(error);
   }
