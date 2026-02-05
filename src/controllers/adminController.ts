@@ -224,6 +224,11 @@ export const getDashboardStats = async (
     const totalOperators = await User.countDocuments({ role: "operator" });
     const totalBookings = await Booking.countDocuments();
 
+    //tours
+    const totalTours = await Tour.countDocuments();
+    const totalActiveTours = await Tour.countDocuments({ isActive: true });
+    const totalFeaturedTours = await Tour.countDocuments({ isFeatured: true });
+
     // NEW USERS & OPERATORS
     const newUsers = await User.countDocuments({
       role: "user",
@@ -366,6 +371,9 @@ export const getDashboardStats = async (
       totals: {
         totalUsers,
         totalOperators,
+        totalTours,
+        totalActiveTours,
+        totalFeaturedTours,
         totalBookings,
         newUsers,
         newOperators

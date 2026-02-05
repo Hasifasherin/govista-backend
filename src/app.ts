@@ -13,6 +13,7 @@ import messageRoutes from "./routes/messageRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import sliderRoutes from "./routes/sliderRoutes";
+import adminCategoryRoutes from "./routes/adminCategoryRoutes";
 
 const app = express();
 
@@ -45,6 +46,8 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/payments", paymentRoutes);
+
+app.use("/api/admin/categories", adminCategoryRoutes);
 
 
 app.use(errorHandler);

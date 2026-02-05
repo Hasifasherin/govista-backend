@@ -27,11 +27,7 @@ const tourSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
-    category: {
-      type: String,
-      enum: ["adventure", "cultural", "nature", "food", "historical", "sports", "relaxation"],
-      default: "adventure"
-    },
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
     availableDates: [
       {
         type: Date,
