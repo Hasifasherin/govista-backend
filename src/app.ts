@@ -14,7 +14,7 @@ import notificationRoutes from "./routes/notificationRoutes";
 import paymentRoutes from "./routes/paymentRoutes";
 import sliderRoutes from "./routes/sliderRoutes";
 import adminCategoryRoutes from "./routes/adminCategoryRoutes";
-
+import adminChatRoutes from "./routes/adminChatRoutes"
 const app = express();
 
 app.use(
@@ -39,6 +39,8 @@ app.use("/api/operator", operatorRoutes);
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/sliders", sliderRoutes); 
+
+app.use("/api/admin/chat", adminChatRoutes);
 
 
 app.use("/api/messages", messageRoutes);

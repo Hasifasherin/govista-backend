@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import User from "../models/User";
 import Tour from "../models/Tour";
 import Booking from "../models/Booking";
@@ -113,54 +114,97 @@ export const getAllTours = async (req: Request, res: Response, next: NextFunctio
 // 2️⃣ Approve / Reject Tour
 export const updateTourApproval = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body; // expected: "approved" | "rejected"
+    const id = req.params.id as string;
+    const { status } = req.body || {};
 
-    const tour = await Tour.findById(id);
-    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
+    console.log("Request params:", req.params);
+    console.log("Request body:", req.body);
 
-    if (!["approved", "rejected"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid status" });
+    if (!status) {
+      return res.status(400).json({ success: false, message: "Request body is missing" });
     }
 
-    tour.status = status;
-    await tour.save();
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status must be either 'approved' or 'rejected'" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid tour ID" });
+    }
+
+    // Use findByIdAndUpdate with { new: true } and skip validation
+    const tour = await Tour.findByIdAndUpdate(
+      id,
+      { $set: { status } },
+      { new: true, runValidators: false } // 🔹 skip validation
+    );
+
+    if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
 
     res.json({ success: true, tour });
   } catch (error) {
-    next(error);
+    console.error("Update tour approval error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
-// 3️⃣ Activate / Deactivate Tour
+
+// Toggle Active / Inactive
 export const toggleTourActive = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tour = await Tour.findById(req.params.id);
+    const tourId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(tourId)) {
+      return res.status(400).json({ success: false, message: "Invalid tour ID" });
+    }
+
+    const tour = await Tour.findById(tourId);
     if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
 
-    tour.isActive = !tour.isActive;
-    await tour.save();
+    const updatedTour = await Tour.findByIdAndUpdate(
+      tourId,
+      { $set: { isActive: !tour.isActive } },
+      { new: true, runValidators: false }
+    );
 
-    res.json({ success: true, tour });
+    res.json({
+      success: true,
+      message: updatedTour!.isActive ? "Tour activated" : "Tour deactivated",
+      tour: updatedTour
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// 4️⃣ Feature / Unfeature Tour
+// Toggle Featured / Unfeatured
 export const toggleTourFeatured = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const tour = await Tour.findById(req.params.id);
+    const tourId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(tourId)) {
+      return res.status(400).json({ success: false, message: "Invalid tour ID" });
+    }
+
+    const tour = await Tour.findById(tourId);
     if (!tour) return res.status(404).json({ success: false, message: "Tour not found" });
 
-    tour.isFeatured = !tour.isFeatured;
-    await tour.save();
+    const updatedTour = await Tour.findByIdAndUpdate(
+      tourId,
+      { $set: { isFeatured: !tour.isFeatured } },
+      { new: true, runValidators: false }
+    );
 
-    res.json({ success: true, tour });
+    res.json({
+      success: true,
+      message: updatedTour!.isFeatured ? "Tour featured" : "Tour unfeatured",
+      tour: updatedTour
+    });
   } catch (error) {
     next(error);
   }
 };
+
 
 
 // booking 
