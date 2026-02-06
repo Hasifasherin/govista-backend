@@ -32,7 +32,7 @@ export const createReview = async (
   try {
     const { tourId, rating, comment } = req.body;
     
-    // ✅ ADDED: Validation for all required fields
+    //  ADDED: Validation for all required fields
     if (!tourId || !rating || !comment) {
       return res.status(400).json({ 
         success: false, 
@@ -40,7 +40,7 @@ export const createReview = async (
       });
     }
 
-    // ✅ ADDED: Rating validation
+    //  ADDED: Rating validation
     if (rating < 1 || rating > 5) {
       return res.status(400).json({ 
         success: false, 

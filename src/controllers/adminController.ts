@@ -284,70 +284,8 @@ export const getDashboardStats = async (
       createdAt: { $gte: last30Days }
     });
 
-    // Total reviews count
-    const totalReviews = await Review.countDocuments();
-
-    // Average rating
-    const averageRatingAgg = await Review.aggregate([
-      {
-        $group: {
-          _id: null,
-          avgRating: { $avg: "$rating" }
-        }
-      }
-    ]);
-
-    const averageRating =
-      averageRatingAgg.length > 0
-        ? Number(averageRatingAgg[0].avgRating.toFixed(1))
-        : 0;
-
-    // Rating distribution (for bar / pie chart)
-    const ratingDistribution = await Review.aggregate([
-      {
-        $group: {
-          _id: "$rating",
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
-
-    // Top rated tours
-    const topRatedTours = await Review.aggregate([
-      {
-        $group: {
-          _id: "$tourId",
-          averageRating: { $avg: "$rating" },
-          totalReviews: { $sum: 1 }
-        }
-      },
-      { $sort: { averageRating: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: "tours",
-          localField: "_id",
-          foreignField: "_id",
-          as: "tour"
-        }
-      },
-      { $unwind: "$tour" },
-      {
-        $project: {
-          title: "$tour.title",
-          averageRating: 1,
-          totalReviews: 1
-        }
-      }
-    ]);
-
-    // Recent reviews (for admin moderation)
-    const recentReviews = await Review.find()
-      .populate("userId", "firstName lastName email")
-      .populate("tourId", "title")
-      .sort({ createdAt: -1 })
-      .limit(5);
+    
+   
 
     // BOOKING TREND (CHART)
     const bookingTrends = await Booking.aggregate([
@@ -424,13 +362,7 @@ export const getDashboardStats = async (
       },
       bookingTrends,
       topAgencies,
-      reviews: {
-        totalReviews,
-        averageRating,
-        ratingDistribution,
-        topRatedTours,
-        recentReviews
-      }
+      
     });
 
   } catch (error) {
@@ -463,11 +395,7 @@ export const getMonthlyCalendar = async (req: Request, res: Response, next: Next
     next(error);
   }
 };
-// Delete inappropriate review
-export const deleteReview = async (req: Request, res: Response) => {
-  await Review.findByIdAndDelete(req.params.id);
-  res.json({ success: true, message: "Review deleted" });
-};
+
 
 // Update booking status
 export const updateBookingStatus = async (req: Request, res: Response) => {
@@ -498,3 +426,72 @@ export const getUpcomingTrips = async (_req: Request, res: Response, next: NextF
   }
 };
 
+// Get all reviews
+export const getAllReviews = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const reviews = await Review.find()
+      .populate("userId", "firstName lastName email")
+      .populate("tourId", "title location price");
+
+    res.json({ success: true, count: reviews.length, reviews });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete a review by ID (keep only ONE declaration)
+export const deleteReview = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const review = await Review.findByIdAndDelete(req.params.id);
+
+    if (!review) {
+      return res.status(404).json({ success: false, message: "Review not found" });
+    }
+
+    res.json({ success: true, message: "Review deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Optional: review stats for analytics
+export const getReviewStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const totalReviews = await Review.countDocuments();
+
+    const averageRatingAgg = await Review.aggregate([
+      { $group: { _id: null, avgRating: { $avg: "$rating" } } }
+    ]);
+
+    const averageRating =
+      averageRatingAgg.length > 0
+        ? Number(averageRatingAgg[0].avgRating.toFixed(1))
+        : 0;
+
+    const ratingDistribution = await Review.aggregate([
+      { $group: { _id: "$rating", count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json({
+      success: true,
+      totalReviews,
+      averageRating,
+      ratingDistribution,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

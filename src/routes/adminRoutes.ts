@@ -17,6 +17,7 @@ import {
   updateTourApproval,
   toggleTourActive,
   toggleTourFeatured,
+  getAllReviews,
 } from "../controllers/adminController";
 
 import {
@@ -59,6 +60,7 @@ router.get("/bookings/:id", getBookingDetails);
 router.put("/bookings/:id/status", updateBookingStatus);
 
 // ================= REVIEWS =================
+router.get("/reviews", getAllReviews);
 router.delete("/reviews/:id", deleteReview);
 
 // ================= ANALYTICS =================
