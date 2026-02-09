@@ -282,3 +282,53 @@ export const getReviewDetails = async (
     next(error);
   }
 };
+// Get all reviews for operator's tours
+export const getOperatorReviews = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (req.user!.role !== "operator") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // 1️⃣ Get operator tours
+    const tours = await Tour.find({ createdBy: req.user!.id }).select("_id title");
+    const tourIds = tours.map(t => t._id);
+
+    // 2️⃣ Get reviews for those tours
+    const reviews = await Review.find({ tourId: { $in: tourIds } })
+      .populate("userId", "firstName lastName email")
+      .populate("tourId", "title location")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // 3️⃣ Aggregates
+    const totalReviews = reviews.length;
+    const averageRating =
+      totalReviews > 0
+        ? (
+            reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+          ).toFixed(2)
+        : "0.00";
+
+    // 4️⃣ Complaint detection (simple logic)
+    const complaints = reviews.filter(r => r.rating <= 2);
+
+    res.json({
+      success: true,
+      stats: {
+        totalReviews,
+        averageRating,
+        complaintsCount: complaints.length,
+      },
+      reviews,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

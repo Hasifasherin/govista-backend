@@ -5,8 +5,9 @@ import {
   getTourReviews, 
   updateReview, 
   deleteReview,
-  getUserReviews,     // ✅ ADDED
-  getReviewDetails    // ✅ ADDED
+  getUserReviews,     
+  getReviewDetails,
+  getOperatorReviews
 } from "../controllers/reviewController";
 
 const router = express.Router();
@@ -14,7 +15,7 @@ const router = express.Router();
 // User creates a review
 router.post("/", protect, roleAccess("user"), createReview);
 
-// Get all reviews for a tour (public) - ✅ FIXED: Changed path to avoid conflict
+// Get all reviews for a tour (public)
 router.get("/tour/:tourId", getTourReviews);
 
 // Get all reviews by current user
@@ -28,5 +29,7 @@ router.put("/:id", protect, roleAccess("user"), updateReview);
 
 // User deletes their review
 router.delete("/:id", protect, roleAccess("user"), deleteReview);
+
+router.get("/operator/reviews", protect, getOperatorReviews);
 
 export default router;

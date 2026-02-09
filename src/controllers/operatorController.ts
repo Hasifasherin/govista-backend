@@ -177,25 +177,69 @@ export const getOperatorDashboard = async (
       .limit(5);
 
     // ================= Monthly Revenue (last 6 months) =================
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(now.getMonth() - 5);
+const sixMonthsAgo = new Date();
+sixMonthsAgo.setMonth(now.getMonth() - 5);
 
-    const monthlyRevenueData = await Booking.aggregate([
-      { $match: { tourId: { $in: tourIds }, status: "accepted", bookingDate: { $gte: sixMonthsAgo, $lte: now } } },
-      { $lookup: { from: "tours", localField: "tourId", foreignField: "_id", as: "tour" } },
-      { $unwind: "$tour" },
-      { $group: { _id: { month: { $month: "$bookingDate" }, year: { $year: "$bookingDate" } }, amount: { $sum: { $multiply: ["$participants", "$tour.price"] } } } },
-      { $sort: { "_id.year": 1, "_id.month": 1 } }
-    ]);
-    const monthlyRevenue = monthlyRevenueData.map(m => ({ month: `${m._id.month}-${m._id.year}`, amount: m.amount }));
+const monthlyRevenueData = await Booking.aggregate([
+  {
+    $match: {
+      tourId: { $in: tourIds },
+      status: "accepted",
+      createdAt: { $gte: sixMonthsAgo, $lte: now },
+    },
+  },
+  {
+    $lookup: {
+      from: "tours",
+      localField: "tourId",
+      foreignField: "_id",
+      as: "tour",
+    },
+  },
+  { $unwind: "$tour" },
+  {
+    $group: {
+      _id: {
+        year: { $year: "$createdAt" },
+        month: { $month: "$createdAt" },
+      },
+      amount: {
+        $sum: { $multiply: ["$participants", "$tour.price"] },
+      },
+    },
+  },
+  { $sort: { "_id.year": 1, "_id.month": 1 } },
+]);
+
+const monthlyRevenue = monthlyRevenueData.map((m) => ({
+  month: `${m._id.month}-${m._id.year}`,
+  amount: m.amount,
+}));
 
     // ================= Monthly Bookings =================
-    const monthlyBookingsData = await Booking.aggregate([
-      { $match: { tourId: { $in: tourIds }, bookingDate: { $gte: sixMonthsAgo, $lte: now } } },
-      { $group: { _id: { month: { $month: "$bookingDate" }, year: { $year: "$bookingDate" } }, count: { $sum: 1 } } },
-      { $sort: { "_id.year": 1, "_id.month": 1 } }
-    ]);
-    const monthlyBookings = monthlyBookingsData.map(m => ({ month: `${m._id.month}-${m._id.year}`, count: m.count }));
+   const monthlyBookingsData = await Booking.aggregate([
+  {
+    $match: {
+      tourId: { $in: tourIds },
+      createdAt: { $gte: sixMonthsAgo, $lte: now },
+    },
+  },
+  {
+    $group: {
+      _id: {
+        year: { $year: "$createdAt" },
+        month: { $month: "$createdAt" },
+      },
+      count: { $sum: 1 },
+    },
+  },
+  { $sort: { "_id.year": 1, "_id.month": 1 } },
+]);
+
+const monthlyBookings = monthlyBookingsData.map((m) => ({
+  month: `${m._id.month}-${m._id.year}`,
+  count: m.count,
+}));
 
     // ================= Tour Categories =================
     const tourCategories = await Tour.aggregate([

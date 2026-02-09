@@ -10,6 +10,7 @@ import {
   getOperatorCustomers,
   getCustomerBookingHistory
 } from "../controllers/operatorController";
+import { getOperatorEarnings } from "../controllers/earningController";
 import { getOperatorCategories } from "../controllers/adminCategoryController";
 
 const router = express.Router();
@@ -55,4 +56,11 @@ router.get(
   getCustomerBookingHistory
 );
 
+//earning 
+router.get(
+  "/operator/earnings",
+  protect,
+  roleAccess("operator"),
+  getOperatorEarnings
+);
 export default router;
