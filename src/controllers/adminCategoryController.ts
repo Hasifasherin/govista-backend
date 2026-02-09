@@ -137,3 +137,13 @@ export const deleteCategory = async (
     next(error);
   }
 };
+// GET ALL ACTIVE CATEGORIES FOR OPERATOR
+export const getOperatorCategories = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const categories = await Category.find({ isActive: true }).select("_id name").sort({ name: 1 });
+    res.json({ success: true, categories });
+  } catch (error) {
+    next(error);
+  }
+};
+

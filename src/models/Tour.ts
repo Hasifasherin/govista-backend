@@ -31,7 +31,6 @@ const tourSchema = new mongoose.Schema(
     availableDates: [
       {
         type: Date,
-        required: true
       }
     ],
     image: {

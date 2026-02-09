@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import Tour from "../models/Tour";
 import Booking from "../models/Booking";
+import Category from "../models/Category";
 
 const createError = (message: string, statusCode: number) => {
   const err = new Error(message) as any;
@@ -63,34 +64,47 @@ export const createTour = async (
       }
     }
 
-    // ✅ Validate availableDates are in future
-    const now = new Date();
-    for (const dateStr of datesArray) {
-      // Handle different date formats
-      let date;
-      if (dateStr.includes('T')) {
-        date = new Date(dateStr); // ISO format with time
-      } else {
-        date = new Date(dateStr + 'T00:00:00'); // Date only, add time
-      }
-      
-      if (date < now) {
-        throw createError(`Date ${dateStr} must be in the future`, 400);
-      }
-    }
+   // ✅ Validate availableDates are today or future (timezone-safe)
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-    const tour = await Tour.create({
-      title,
-      description,
-      price,
-      location,
-      duration,
-      maxGroupSize,
-      availableDates: datesArray, // ✅ Use the parsed array
-      image,
-      category,
-      createdBy: req.user!.id,
-    });
+for (const dateStr of datesArray) {
+  let date;
+  if (dateStr.includes("T")) {
+    date = new Date(dateStr);
+  } else {
+    date = new Date(dateStr + "T00:00:00");
+  }
+
+  date.setHours(0, 0, 0, 0);
+
+  if (date < today) {
+    throw createError(`Date ${dateStr} must be today or in the future`, 400);
+  }
+}
+
+
+    // ✅ Convert to Date objects (VERY IMPORTANT)
+const parsedDates = datesArray.map((dateStr: string) => {
+  if (dateStr.includes("T")) {
+    return new Date(dateStr);
+  }
+  return new Date(dateStr + "T00:00:00");
+});
+
+const tour = await Tour.create({
+  title,
+  description,
+  price,
+  location,
+  duration,
+  maxGroupSize,
+  availableDates: parsedDates,
+  image,
+  category,
+  createdBy: req.user!.id,
+});
+
 
     res.status(201).json({ success: true, tour });
   } catch (error) {
@@ -411,11 +425,14 @@ export const getTourCategories = async (
   next: NextFunction
 ) => {
   try {
-    const categories = await Tour.distinct("category", { 
-      isActive: true, 
-      status: "approved" 
+    const categories = await Category.find({ isActive: true })
+      .select("_id name")
+      .sort({ name: 1 });
+
+    res.json({
+      success: true,
+      categories,
     });
-    res.json({ success: true, categories });
   } catch (error) {
     next(error);
   }
