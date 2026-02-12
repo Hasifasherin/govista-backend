@@ -168,52 +168,77 @@ export const updateBookingStatus = async (
   next: NextFunction
 ) => {
   try {
+    // ✅ Role guard
     if (req.user!.role !== "operator") {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-
-    const { status } = req.body;
-    const bookingId = req.params.id;
-
-    if (!["accepted", "rejected"].includes(status)) {
-      return res.status(400).json({ success: false, message: "Invalid status" });
-    }
-
-    const booking = await Booking.findById(bookingId).populate("tourId");
-    if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
-    }
-
-    if (booking.status !== "pending") {
-      return res.status(400).json({
+      return res.status(403).json({
         success: false,
-        message: "Already processed"
+        message: "Access denied",
       });
     }
 
+    const bookingId = String(req.params.id);
+    const { status } = req.body;
+
+    // ✅ ObjectId validation (FIXES TS ERROR)
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking id",
+      });
+    }
+
+    // ✅ Status validation
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    const booking = await Booking.findById(bookingId).populate("tourId");
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    // ✅ Already handled
+    if (booking.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Already processed",
+      });
+    }
+
+    // ✅ Ownership check
     if (booking.operatorId.toString() !== req.user!.id) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
     }
 
     const tour = booking.tourId as any;
 
-    // Re-check capacity
+    // ✅ Capacity re-check
     if (status === "accepted") {
-      const existing = await Booking.find({
+      const existingBookings = await Booking.find({
         tourId: tour._id,
         travelDate: booking.travelDate,
-        status: "accepted"
+        status: "accepted",
       });
 
-      const total = existing.reduce(
+      const totalParticipants = existingBookings.reduce(
         (sum, b) => sum + b.participants,
         0
       );
 
-      if (total + booking.participants > tour.maxGroupSize) {
+      if (totalParticipants + booking.participants > tour.maxGroupSize) {
         return res.status(400).json({
           success: false,
-          message: "Tour is already full"
+          message: "Tour is already full",
         });
       }
     }
@@ -221,11 +246,12 @@ export const updateBookingStatus = async (
     booking.status = status;
     await booking.save();
 
+    // ✅ Notify user
     await createNotification({
       user: booking.userId.toString(),
       title: "Booking Update",
       message: `Your booking for "${tour.title}" was ${status}.`,
-      type: "booking"
+      type: "booking",
     });
 
     res.json({ success: true, booking });
@@ -241,7 +267,16 @@ export const getBookingDetails = async (
   next: NextFunction
 ) => {
   try {
-    const booking = await Booking.findById(req.params.id)
+    const bookingId = String(req.params.id);
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking id",
+      });
+    }
+
+    const booking = await Booking.findById(bookingId)
       .populate("tourId", "title description location price duration availableDates image")
       .populate("userId", "firstName lastName email phone");
 
@@ -249,12 +284,12 @@ export const getBookingDetails = async (
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
 
-    const isUserOwner = booking.userId._id.toString() === req.user.id;
+    const isUserOwner = booking.userId._id.toString() === req.user!.id;
     const isOperatorOwner =
-      req.user.role === "operator" &&
-      booking.operatorId.toString() === req.user.id;
+      req.user!.role === "operator" &&
+      booking.operatorId.toString() === req.user!.id;
 
-    if (!isUserOwner && !isOperatorOwner && req.user.role !== "admin") {
+    if (!isUserOwner && !isOperatorOwner && req.user!.role !== "admin") {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
@@ -263,6 +298,7 @@ export const getBookingDetails = async (
     next(error);
   }
 };
+
 
 // ================= CANCEL BOOKING =================
 export const cancelBooking = async (
@@ -271,20 +307,38 @@ export const cancelBooking = async (
   next: NextFunction
 ) => {
   try {
-    const booking = await Booking.findById(req.params.id).populate("tourId");
+    const bookingId = String(req.params.id);
+
+    // ✅ ObjectId validation (FIXES TS error)
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking id",
+      });
+    }
+
+    const booking = await Booking.findById(bookingId).populate("tourId");
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
     }
 
+    // ✅ Ownership check
     if (booking.userId.toString() !== req.user!.id) {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
     }
 
+    // ✅ Status check
     if (booking.status !== "pending") {
       return res.status(400).json({
         success: false,
-        message: "Only pending bookings can be cancelled"
+        message: "Only pending bookings can be cancelled",
       });
     }
 
@@ -293,11 +347,12 @@ export const cancelBooking = async (
 
     const tour = booking.tourId as any;
 
+    // ✅ Notify operator
     await createNotification({
       user: tour.createdBy.toString(),
       title: "Booking Cancelled",
       message: `A user cancelled booking for "${tour.title}".`,
-      type: "booking"
+      type: "booking",
     });
 
     res.json({ success: true, booking });
@@ -305,3 +360,4 @@ export const cancelBooking = async (
     next(error);
   }
 };
+

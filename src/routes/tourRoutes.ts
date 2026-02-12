@@ -16,6 +16,8 @@ import {
 
 const router = express.Router();
 
+router.get("/", getTours);
+
 // Public route for search & filter — MUST be before /:id
 router.get("/search", searchTours);
 

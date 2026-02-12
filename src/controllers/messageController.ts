@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import MessageModel from "../models/Message"; // ✅ CHANGED: Renamed import
+import MessageModel from "../models/Message";
 import User from "../models/User";
+import Booking from "../models/Booking";
 
 // ============================
 // Send a message (User/Operator)
@@ -12,79 +13,117 @@ export const sendMessage = async (
   next: NextFunction
 ) => {
   try {
-    const { receiverId, message: messageText } = req.body; // ✅ RENAMED: message -> messageText
+    const {
+      receiverId,
+      message: messageText,
+      bookingId,
+      tourId,
+      messageType
+    } = req.body;
 
     if (!receiverId || !messageText) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "receiverId and message are required" 
+      return res.status(400).json({
+        success: false,
+        message: "receiverId and message are required",
       });
     }
 
-    // ✅ ADDED: Cannot message yourself
     if (receiverId === req.user!.id) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Cannot message yourself" 
+      return res.status(400).json({
+        success: false,
+        message: "Cannot message yourself",
       });
     }
 
-    // ✅ ADDED: Check if receiver exists and is not blocked
+    // Validate receiver
     const receiver = await User.findById(receiverId);
-    
     if (!receiver) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Receiver not found" 
+      return res.status(404).json({
+        success: false,
+        message: "Receiver not found",
       });
     }
 
     if (receiver.isBlocked) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Cannot message blocked user" 
+      return res.status(400).json({
+        success: false,
+        message: "Cannot message blocked user",
       });
     }
 
-    // ✅ ADDED: Role-based restrictions
+    // Role-based restrictions
     if (req.user!.role === "user" && receiver.role !== "operator") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Users can only message operators" 
+      return res.status(400).json({
+        success: false,
+        message: "Users can only message operators",
       });
     }
 
     if (req.user!.role === "operator" && receiver.role !== "user") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Operators can only message users" 
+      return res.status(400).json({
+        success: false,
+        message: "Operators can only message users",
       });
     }
 
-    // ✅ ADDED: Check if sender is blocked by receiver
+    // Sender blocked check
     const sender = await User.findById(req.user!.id);
     if (sender!.isBlocked) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Your account is blocked" 
+      return res.status(400).json({
+        success: false,
+        message: "Your account is blocked",
       });
     }
 
-    const newMessage = await MessageModel.create({ // ✅ CHANGED: Message -> MessageModel
+    // 🔑 Booking validation (ONLY if provided)
+    if (bookingId) {
+      if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid bookingId",
+        });
+      }
+
+      const booking = await Booking.findById(bookingId);
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found",
+        });
+      }
+
+      // Operator ownership check
+      if (
+        req.user!.role === "operator" &&
+        booking.operatorId.toString() !== req.user!.id
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied for this booking",
+        });
+      }
+    }
+
+    // ✅ Create message (new fields added safely)
+    const newMessage = await MessageModel.create({
       sender: req.user!.id,
       receiver: receiverId,
-      message: messageText, // ✅ Use renamed variable
+      message: messageText,
       read: false,
+      bookingId: bookingId || null,
+      tourId: tourId || null,
+      messageType: messageType || "text",
     });
 
-    // ✅ ADDED: Populate sender info in response
-    const populatedMessage = await MessageModel.findById(newMessage._id) // ✅ CHANGED
+    const populatedMessage = await MessageModel.findById(newMessage._id)
       .populate("sender", "firstName lastName email role")
-      .populate("receiver", "firstName lastName email role");
+      .populate("receiver", "firstName lastName email role")
+      .populate("bookingId", "status travelDate")
+      .populate("tourId", "title location");
 
-    res.status(201).json({ 
-      success: true, 
-      data: populatedMessage // ✅ CHANGED: 'message' -> 'data' to avoid confusion
+    res.status(201).json({
+      success: true,
+      data: populatedMessage,
     });
   } catch (error) {
     next(error);
@@ -92,7 +131,7 @@ export const sendMessage = async (
 };
 
 // ============================
-// Get conversation between two users
+// Get conversation between two users (optional bookingId)
 // ============================
 export const getConversation = async (
   req: Request & { user?: any },
@@ -100,55 +139,80 @@ export const getConversation = async (
   next: NextFunction
 ) => {
   try {
-    const { otherUserId } = req.params;
-    
-    // ✅ FIXED: Convert to string first
+    const { otherUserId, bookingId } = req.params;
+
+
     const otherUserIdStr = String(otherUserId);
 
-    if (!otherUserIdStr) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "otherUserId is required" 
-      });
-    }
+    if (otherUserId && !mongoose.Types.ObjectId.isValid(String(otherUserId))) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid user ID",
+  });
+}
 
-    // ✅ FIXED: Validate otherUserId
-    if (!mongoose.Types.ObjectId.isValid(otherUserIdStr)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid user ID" 
-      });
-    }
+if (bookingId && !mongoose.Types.ObjectId.isValid(String(bookingId))) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid bookingId",
+  });
+}
 
-    const messages = await MessageModel.find({ // ✅ CHANGED: Message -> MessageModel
-      $or: [
-        { sender: req.user!.id, receiver: otherUserIdStr },
-        { sender: otherUserIdStr, receiver: req.user!.id },
-      ],
-    })
+
+    // 🔑 Base conversation filter
+    let conversationFilter: any = {};
+
+// Booking-based chat (PRIMARY)
+if (bookingId) {
+  conversationFilter = {
+    bookingId,
+    $or: [
+      { sender: req.user!.id },
+      { receiver: req.user!.id }
+    ],
+  };
+} 
+// User-based chat (SECONDARY / LEGACY)
+else if (otherUserId) {
+  conversationFilter = {
+    $or: [
+      { sender: req.user!.id, receiver: otherUserId },
+      { sender: otherUserId, receiver: req.user!.id },
+    ],
+  };
+}
+
+
+    // Fetch messages
+    const messages = await MessageModel.find(conversationFilter)
       .populate("sender", "firstName lastName email role")
       .populate("receiver", "firstName lastName email role")
+      .populate("bookingId", "status travelDate")
+      .populate("tourId", "title location")
       .sort({ createdAt: 1 });
 
-    // ✅ FIXED: Use string version
-    await MessageModel.updateMany( // ✅ CHANGED: Message -> MessageModel
-      {
-        sender: otherUserIdStr,
-        receiver: req.user!.id,
-        read: false
-      },
-      { $set: { read: true } }
-    );
+    // ✅ Mark unread messages as read
+    await MessageModel.updateMany(
+  {
+    receiver: req.user!.id,
+    read: false,
+    ...(bookingId ? { bookingId } : {}),
+    ...(otherUserId ? { sender: otherUserId } : {}),
+  },
+  { $set: { read: true } }
+);
 
-    res.json({ 
-      success: true, 
-      count: messages.length, 
-      messages 
+
+    res.json({
+      success: true,
+      count: messages.length,
+      messages,
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 // ============================
 // Admin: Get all messages
@@ -325,3 +389,108 @@ export const getUnreadCount = async (
     next(error);
   }
 };
+
+//edit message 
+export const editMessage = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    if (!message?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Message text is required",
+      });
+    }
+
+    const msg = await MessageModel.findById(id);
+
+    if (!msg) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found",
+      });
+    }
+
+    // Permission check
+    if (msg.sender.toString() !== req.user!.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can edit only your messages",
+      });
+    }
+
+    // Cannot edit deleted message
+    if (msg.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Deleted message cannot be edited",
+      });
+    }
+
+    msg.message = message;
+    await msg.save();
+
+    res.json({
+      success: true,
+      data: msg,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+//delete message 
+export const deleteMessage = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+
+    const msg = await MessageModel.findById(id);
+
+    if (!msg) {
+      return res.status(404).json({
+        success: false,
+        message: "Message not found",
+      });
+    }
+
+    // Permission check
+    if (msg.sender.toString() !== req.user!.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can delete only your messages",
+      });
+    }
+
+    // Already deleted
+    if (msg.isDeleted) {
+      return res.status(400).json({
+        success: false,
+        message: "Message already deleted",
+      });
+    }
+
+    msg.isDeleted = true;
+    msg.deletedAt = new Date();
+    msg.message = "This message was deleted";
+
+    await msg.save();
+
+    res.json({
+      success: true,
+      message: "Message deleted successfully",
+      data: msg,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

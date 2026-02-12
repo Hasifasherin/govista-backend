@@ -137,10 +137,12 @@ export const getTours = async (
     }
 
     const tours = await Tour.find(filter)
-      .populate("createdBy", "firstName lastName email role")
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
+  .populate("createdBy", "firstName lastName email role")
+  .populate("category", "name")
+  .skip(skip)
+  .limit(limit)
+  .sort({ createdAt: -1 });
+
 
     const total = await Tour.countDocuments(filter);
 
@@ -403,14 +405,16 @@ export const getFeaturedTours = async (
   next: NextFunction
 ) => {
   try {
-    const tours = await Tour.find({ 
-      isFeatured: true, 
-      isActive: true, 
-      status: "approved" 
-    })
-      .populate("createdBy", "firstName lastName email")
-      .limit(6)
-      .sort({ createdAt: -1 });
+    const tours = await Tour.find({
+  isFeatured: true,
+  isActive: true,
+  status: "approved"
+})
+  .populate("createdBy", "firstName lastName email")
+  .populate("category", "name")
+  .limit(6)
+  .sort({ createdAt: -1 });
+
 
     res.json({ success: true, count: tours.length, tours });
   } catch (error) {

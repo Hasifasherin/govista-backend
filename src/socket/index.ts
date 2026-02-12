@@ -7,21 +7,20 @@ import Message from "../models/Message";
 ========================= */
 
 interface JoinChatPayload {
-  operatorId: string;
-  userId: string;
+  bookingId: string;
 }
 
 interface SendMessagePayload {
   senderId: string;
   receiverId: string;
-  operatorId: string;
-  userId: string;
+  bookingId: string;
+  tourId?: string;
   message: string;
 }
 
 interface MarkReadPayload {
-  senderId: string;
-  receiverId: string;
+  bookingId: string;
+  readerId: string;
 }
 
 /* =========================
@@ -40,23 +39,20 @@ export const initSocket = (server: http.Server) => {
     console.log("🔌 Socket connected:", socket.id);
 
     /* =========================
-       Join User ↔ Operator Chat
+       Join Booking Chat
+       (User ↔ Operator)
     ========================== */
-    socket.on(
-      "joinChat",
-      ({ operatorId, userId }: JoinChatPayload) => {
-        const room = `chat-${operatorId}-${userId}`;
-        socket.join(room);
-      }
-    );
+    socket.on("joinChat", ({ bookingId }: JoinChatPayload) => {
+      socket.join(`booking-chat-${bookingId}`);
+    });
 
     /* =========================
-       Admin → Watch Operator
+       Admin → Watch Booking
     ========================== */
     socket.on(
-      "joinAdminOperator",
-      ({ operatorId }: { operatorId: string }) => {
-        socket.join(`admin-operator-${operatorId}`);
+      "joinAdminBooking",
+      ({ bookingId }: { bookingId: string }) => {
+        socket.join(`admin-booking-${bookingId}`);
       }
     );
 
@@ -75,14 +71,19 @@ export const initSocket = (server: http.Server) => {
       async ({
         senderId,
         receiverId,
-        operatorId,
-        userId,
+        bookingId,
+        tourId,
         message,
       }: SendMessagePayload) => {
+        if (!message?.trim()) return;
+
         const newMessage = await Message.create({
           sender: senderId,
           receiver: receiverId,
+          bookingId,
+          tourId,
           message,
+          messageType: "text",
           read: false,
         });
 
@@ -90,27 +91,22 @@ export const initSocket = (server: http.Server) => {
           _id: newMessage._id,
           sender: senderId,
           receiver: receiverId,
+          bookingId,
           message,
           createdAt: newMessage.createdAt,
         };
 
-        // Chat room
-        io.to(`chat-${operatorId}-${userId}`).emit(
-          "newMessage",
-          payload
-        );
+        // Booking chat room
+        io.to(`booking-chat-${bookingId}`).emit("newMessage", payload);
 
-        // Admin operator monitor
-        io.to(`admin-operator-${operatorId}`).emit(
+        // Admin booking monitor
+        io.to(`admin-booking-${bookingId}`).emit(
           "adminNewMessage",
           payload
         );
 
         // Global admin
-        io.to("admin-global").emit(
-          "adminNewMessage",
-          payload
-        );
+        io.to("admin-global").emit("adminNewMessage", payload);
       }
     );
 
@@ -119,16 +115,24 @@ export const initSocket = (server: http.Server) => {
     ========================== */
     socket.on(
       "markRead",
-      async ({ senderId, receiverId }: MarkReadPayload) => {
+      async ({ bookingId, readerId }: MarkReadPayload) => {
         await Message.updateMany(
-          { sender: senderId, receiver: receiverId, read: false },
+          {
+            bookingId,
+            receiver: readerId,
+            read: false,
+          },
           { $set: { read: true } }
         );
 
-        io.emit("messagesRead", {
-          senderId,
-          receiverId,
-        });
+        // Notify only booking room
+        io.to(`booking-chat-${bookingId}`).emit(
+          "messagesRead",
+          {
+            bookingId,
+            readerId,
+          }
+        );
       }
     );
 

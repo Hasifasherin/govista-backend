@@ -12,55 +12,45 @@ import {
 } from "../controllers/operatorController";
 import { getOperatorEarnings } from "../controllers/earningController";
 import { getOperatorCategories } from "../controllers/adminCategoryController";
+import {
+  getConversations,   // list of conversations
+  getConversation,    // messages with a specific user
+  sendMessage         // send a message
+} from "../controllers/messageController";
 
 const router = express.Router();
 
 // All routes protected for operators
 router.use(protect, roleAccess("operator"));
 
-// Get all tours created by the operator
+// --- Tours ---
 router.get("/tours", getOperatorTours);
-
-// GET categories for operator
 router.get("/tours/categories", getOperatorCategories);
 
-
-// Get all bookings for operator's tours
+// --- Bookings ---
 router.get("/bookings", getOperatorBookings);
-
-// Get specific booking details
 router.get("/bookings/:bookingId", getOperatorBookingDetails);
-
-// Update booking status
 router.put("/bookings/:bookingId/status", updateBookingStatus);
 
-// Get operator dashboard stats
+// --- Dashboard ---
 router.get("/dashboard", getOperatorDashboard);
-
-// Get booking statistics (for charts)
 router.get("/statistics", getBookingStatistics);
 
-//  Get all customers who booked operator's tours
-router.get(
-  "/customers",
-  protect,
-  roleAccess("operator"), 
-  getOperatorCustomers
-);
+// --- Customers ---
+router.get("/customers", getOperatorCustomers);
+router.get("/customers/:userId/bookings", getCustomerBookingHistory);
 
-//  Get booking history for a specific customer
-router.get(
-  "/customers/:userId/bookings",
-  protect,
-  roleAccess("operator"), 
-  getCustomerBookingHistory
-);
+// --- Earnings ---
+router.get("/earnings", getOperatorEarnings);
 
-//earning 
-router.get(
-  "/operator/earnings",
-  protect,
-  roleAccess("operator"),
-  getOperatorEarnings
-);
+// --- Operator Chat (NEW) ---
+// List all conversations for the logged-in operator
+router.get("/messages", getConversations);
+
+// Get messages with a specific user
+router.get("/messages/booking/:bookingId", getConversation);
+
+// Send message to a specific user
+router.post("/messages/booking/:bookingId", sendMessage);
+
 export default router;

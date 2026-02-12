@@ -93,12 +93,6 @@ if (!booking) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-
-    // Ensure operator owns this tour
-    if (tour.createdBy.toString() !== req.user!.id) {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-
     // Validate new status
     const validStatuses = ["pending", "accepted", "rejected", "cancelled"];
     if (!validStatuses.includes(status)) {
@@ -178,7 +172,7 @@ export const getOperatorDashboard = async (
 
     // ================= Monthly Revenue (last 6 months) =================
 const sixMonthsAgo = new Date();
-sixMonthsAgo.setMonth(now.getMonth() - 5);
+sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
 
 const monthlyRevenueData = await Booking.aggregate([
   {
@@ -396,7 +390,7 @@ export const getOperatorCustomers = async (
 
     const operatorId = req.user!.id;
 
-    // Fetch bookings and populate user info
+    // Fetch bookings with user info
     const bookings = await Booking.find({ operatorId })
       .populate("userId", "firstName lastName email phone")
       .lean();
@@ -410,22 +404,35 @@ export const getOperatorCustomers = async (
     };
 
     type BookingWithUser = {
+      _id: mongoose.Types.ObjectId;
       userId: PopulatedUser;
       bookingDate?: Date;
       createdAt: Date;
     };
 
-    //  Type assertion via unknown first
     const bookingsTyped = bookings as unknown as BookingWithUser[];
 
-    const uniqueUsersMap: { [key: string]: any } = {};
+    const uniqueUsersMap: Record<
+      string,
+      {
+        _id: mongoose.Types.ObjectId;
+        firstName: string;
+        lastName: string;
+        email: string;
+        phone: string;
+        totalBookings: number;
+        lastBookingDate: Date | null;
+        chatBookingId: mongoose.Types.ObjectId | null;
+      }
+    > = {};
 
-    bookingsTyped.forEach(b => {
+    bookingsTyped.forEach((b) => {
       const user = b.userId;
       if (!user) return;
 
       const userKey = user._id.toString();
 
+      // Initialize user
       if (!uniqueUsersMap[userKey]) {
         uniqueUsersMap[userKey] = {
           _id: user._id,
@@ -434,29 +441,39 @@ export const getOperatorCustomers = async (
           email: user.email,
           phone: user.phone,
           totalBookings: 0,
-          lastBookingDate: null as Date | null,
+          lastBookingDate: null,
+          chatBookingId: null,
         };
       }
 
       uniqueUsersMap[userKey].totalBookings += 1;
 
-      const bookingDate = b.bookingDate ? new Date(b.bookingDate) : new Date(b.createdAt);
+      const bookingDate = b.bookingDate
+        ? new Date(b.bookingDate)
+        : new Date(b.createdAt);
 
+      // Keep latest booking for chat
       if (
         !uniqueUsersMap[userKey].lastBookingDate ||
         bookingDate > uniqueUsersMap[userKey].lastBookingDate
       ) {
         uniqueUsersMap[userKey].lastBookingDate = bookingDate;
+        uniqueUsersMap[userKey].chatBookingId = b._id;
       }
     });
 
     const customers = Object.values(uniqueUsersMap);
 
-    res.json({ success: true, count: customers.length, customers });
+    res.json({
+      success: true,
+      count: customers.length,
+      customers,
+    });
   } catch (error) {
     next(error);
   }
 };
+
 
 //  Get booking history of a specific customer (user)
 export const getCustomerBookingHistory = async (

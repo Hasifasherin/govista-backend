@@ -22,8 +22,6 @@ router.post("/", roleAccess("user"), requestBooking);
 // Get my bookings
 router.get("/my-bookings", roleAccess("user"), getUserBookings);
 
-// Get booking details
-router.get("/:id", getBookingDetails);  // Add this - users can view their booking
 
 // Cancel booking
 router.put("/:id/cancel", roleAccess("user"), cancelBooking);
@@ -32,6 +30,9 @@ router.put("/:id/cancel", roleAccess("user"), cancelBooking);
 
 // Get operator bookings
 router.get("/operator", roleAccess("operator"), getOperatorBookings);
+
+// Get booking details
+router.get("/:id", getBookingDetails);  
 
 // Accept / Reject booking
 router.put("/:id/status", roleAccess("operator"), updateBookingStatus);
