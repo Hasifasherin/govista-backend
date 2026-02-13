@@ -1,60 +1,72 @@
 import { Server, Socket } from "socket.io";
 import http from "http";
-import Message from "../models/Message";
+import mongoose from "mongoose";
+import MessageModel from "../models/Message";
+import User from "../models/User";
 
 /* =========================
    Socket Payload Types
 ========================= */
 
-interface JoinChatPayload {
-  bookingId: string;
+interface ServerToClientEvents {
+  newMessage: (message: any) => void;
+  adminNewMessage: (message: any) => void;
+  messagesRead: (data: { bookingId?: string; senderId?: string; readerId: string; count: number }) => void;
 }
 
-interface SendMessagePayload {
-  senderId: string;
-  receiverId: string;
-  bookingId: string;
-  tourId?: string;
-  message: string;
+interface ClientToServerEvents {
+  joinChat: (payload: { bookingId?: string; otherUserId?: string }) => void;
+  joinAdminBooking: (payload: { bookingId: string }) => void;
+  joinAdminGlobal: () => void;
+  sendMessage: (payload: {
+    senderId: string;
+    receiverId: string;
+    bookingId?: string;
+    tourId?: string;
+    message: string;
+  }) => void;
+  markRead: (payload: { bookingId?: string; otherUserId?: string; readerId: string }) => void;
 }
 
-interface MarkReadPayload {
-  bookingId: string;
-  readerId: string;
-}
+interface InterServerEvents {}
+interface SocketData { userId?: string }
 
 /* =========================
    Init Socket
 ========================= */
 
 export const initSocket = (server: http.Server) => {
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      credentials: true,
-    },
+  const io = new Server<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  >({
+    cors: { origin: "*", credentials: true },
   });
 
-  io.on("connection", (socket: Socket) => {
+  io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents>) => {
     console.log("🔌 Socket connected:", socket.id);
 
     /* =========================
-       Join Booking Chat
-       (User ↔ Operator)
+       Join Chat (Booking or Pre-booking)
     ========================== */
-    socket.on("joinChat", ({ bookingId }: JoinChatPayload) => {
-      socket.join(`booking-chat-${bookingId}`);
+    socket.on("joinChat", ({ bookingId, otherUserId }) => {
+      if (bookingId && mongoose.Types.ObjectId.isValid(bookingId)) {
+        socket.join(`booking-chat-${bookingId}`);
+      } else if (otherUserId && mongoose.Types.ObjectId.isValid(otherUserId)) {
+        // Pre-booking user-to-user chat room
+        socket.join(`user-chat-${otherUserId}`);
+      }
     });
 
     /* =========================
        Admin → Watch Booking
     ========================== */
-    socket.on(
-      "joinAdminBooking",
-      ({ bookingId }: { bookingId: string }) => {
-        socket.join(`admin-booking-${bookingId}`);
-      }
-    );
+    socket.on("joinAdminBooking", ({ bookingId }) => {
+      if (!bookingId || !mongoose.Types.ObjectId.isValid(bookingId)) return;
+      socket.join(`admin-booking-${bookingId}`);
+    });
 
     /* =========================
        Admin → Watch All
@@ -66,76 +78,85 @@ export const initSocket = (server: http.Server) => {
     /* =========================
        Send Message
     ========================== */
-    socket.on(
-      "sendMessage",
-      async ({
-        senderId,
-        receiverId,
-        bookingId,
-        tourId,
-        message,
-      }: SendMessagePayload) => {
-        if (!message?.trim()) return;
+    socket.on("sendMessage", async ({ senderId, receiverId, bookingId, tourId, message }) => {
+      try {
+        if (
+          !message?.trim() ||
+          !mongoose.Types.ObjectId.isValid(senderId) ||
+          !mongoose.Types.ObjectId.isValid(receiverId) ||
+          (bookingId && !mongoose.Types.ObjectId.isValid(bookingId)) ||
+          (tourId && !mongoose.Types.ObjectId.isValid(tourId))
+        ) return;
 
-        const newMessage = await Message.create({
+        const newMessage = await MessageModel.create({
           sender: senderId,
           receiver: receiverId,
-          bookingId,
-          tourId,
+          bookingId: bookingId || null,
+          tourId: tourId || null,
           message,
           messageType: "text",
           read: false,
         });
 
-        const payload = {
-          _id: newMessage._id,
-          sender: senderId,
-          receiver: receiverId,
-          bookingId,
-          message,
-          createdAt: newMessage.createdAt,
-        };
+        const populatedMessage = await MessageModel.findById(newMessage._id)
+          .populate("sender", "firstName lastName email role")
+          .populate("receiver", "firstName lastName email role")
+          .populate("bookingId", "status travelDate")
+          .populate("tourId", "title location");
 
-        // Booking chat room
-        io.to(`booking-chat-${bookingId}`).emit("newMessage", payload);
+        if (!populatedMessage) return;
 
-        // Admin booking monitor
-        io.to(`admin-booking-${bookingId}`).emit(
-          "adminNewMessage",
-          payload
-        );
+        // Emit events
+        if (bookingId) {
+          io.to(`booking-chat-${bookingId}`).emit("newMessage", populatedMessage);
+          io.to(`admin-booking-${bookingId}`).emit("adminNewMessage", populatedMessage);
+        } else {
+          // Pre-booking chat room
+          io.to(`user-chat-${receiverId}`).emit("newMessage", populatedMessage);
+        }
 
-        // Global admin
-        io.to("admin-global").emit("adminNewMessage", payload);
+        io.to("admin-global").emit("adminNewMessage", populatedMessage);
+
+      } catch (err) {
+        console.error("Socket sendMessage error:", err);
       }
-    );
+    });
 
     /* =========================
        Mark Messages Read
     ========================== */
-    socket.on(
-      "markRead",
-      async ({ bookingId, readerId }: MarkReadPayload) => {
-        await Message.updateMany(
-          {
-            bookingId,
-            receiver: readerId,
-            read: false,
-          },
-          { $set: { read: true } }
-        );
+    socket.on("markRead", async ({ bookingId, otherUserId, readerId }) => {
+      try {
+        const filter: any = { receiver: readerId, read: false };
+        let roomId: string | null = null;
 
-        // Notify only booking room
-        io.to(`booking-chat-${bookingId}`).emit(
-          "messagesRead",
-          {
+        if (bookingId && mongoose.Types.ObjectId.isValid(bookingId)) {
+          filter.bookingId = bookingId;
+          roomId = `booking-chat-${bookingId}`;
+        } else if (otherUserId && mongoose.Types.ObjectId.isValid(otherUserId)) {
+          filter.sender = otherUserId;
+          roomId = `user-chat-${otherUserId}`;
+        }
+
+        const result = await MessageModel.updateMany(filter, { $set: { read: true } });
+
+        if (roomId) {
+          io.to(roomId).emit("messagesRead", {
             bookingId,
+            senderId: otherUserId,
             readerId,
-          }
-        );
-      }
-    );
+            count: result.modifiedCount,
+          });
+        }
 
+      } catch (err) {
+        console.error("Socket markRead error:", err);
+      }
+    });
+
+    /* =========================
+       Disconnect
+    ========================== */
     socket.on("disconnect", () => {
       console.log("❌ Socket disconnected:", socket.id);
     });

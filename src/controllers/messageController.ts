@@ -331,43 +331,48 @@ export const getConversations = async (
   }
 };
 
-// ✅ ADDED: Mark messages as read
+// ✅ Updated: Mark messages as read safely (TypeScript-safe)
 export const markAsRead = async (
   req: Request & { user?: any },
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const { otherUserId } = req.params;
-    
-    // ✅ FIXED: Convert to string first
-    const otherUserIdStr = String(otherUserId);
+    let { otherUserId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(otherUserIdStr)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid user ID" 
+    // If otherUserId is an array, take the first element
+    if (Array.isArray(otherUserId)) {
+      otherUserId = otherUserId[0];
+    }
+
+    if (!otherUserId || !mongoose.Types.ObjectId.isValid(otherUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
       });
     }
 
-    // Mark all messages from other user as read
-    const result = await MessageModel.updateMany( // ✅ CHANGED: Message -> MessageModel
+    const otherUserObjectId = new mongoose.Types.ObjectId(otherUserId);
+
+    // Mark all messages from the other user as read
+    const result = await MessageModel.updateMany(
       {
-        sender: otherUserIdStr,
-        receiver: req.user!.id,
-        read: false
+        sender: otherUserObjectId,
+        receiver: new mongoose.Types.ObjectId(req.user!.id),
+        read: false,
       },
       { $set: { read: true } }
     );
 
-    res.json({ 
-      success: true, 
-      message: `${result.modifiedCount} messages marked as read` 
+    res.json({
+      success: true,
+      message: `${result.modifiedCount} messages marked as read`,
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 // ✅ ADDED: Get unread message count
 export const getUnreadCount = async (

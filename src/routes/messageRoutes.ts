@@ -15,14 +15,12 @@ const router = express.Router();
 
 router.use(protect);
 
-// Edit message
-router.put("/:id", editMessage);
 
-// Delete message (soft)
-router.delete("/:id", deleteMessage);
 
 
 // ================= Conversations =================
+// Mark conversation as read
+router.put("/:otherUserId/read", markAsRead);
 
 // Get list of conversations
 router.get("/", getConversations);
@@ -37,8 +35,11 @@ router.post("/", sendMessage);
 router.get("/booking/:bookingId", getConversation);
 router.get("/conversation/:otherUserId", getConversation);
 
-// Mark conversation as read
-router.put("/:otherUserId/read", markAsRead);
+// Edit message
+router.put("/:id", editMessage);
+
+// Delete message (soft)
+router.delete("/:id", deleteMessage);
 
 // ================= Admin =================
 
