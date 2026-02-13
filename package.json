@@ -1,14 +1,19 @@
 {
-  "name": "backend",
+  "name": "govista-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Govista Tour Booking Backend API",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts"
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cloudinary": "^1.41.3",
