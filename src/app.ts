@@ -19,18 +19,18 @@ const app = express();
 
 
 const allowedOrigins = [
-  process.env.CLIENT_URL || "http://localhost:3000"
+  process.env.CLIENT_URL,
+  "http://localhost:3000",
 ];
-
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS not allowed"));
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
