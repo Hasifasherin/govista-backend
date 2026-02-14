@@ -4,7 +4,7 @@ import {
   deleteFromCloudinary
 } from "../utils/cloudinaryUpload";
 
-// Image validation middleware
+/* ================= IMAGE VALIDATION ================= */
 export const validateImage = (
   req: Request,
   res: Response,
@@ -12,17 +12,25 @@ export const validateImage = (
 ) => {
   if (!req.file) return next();
 
-  // Check file size (max 5MB)
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const maxSize = 10 * 1024 * 1024; // 10MB
+
+  // File size check
   if (req.file.size > maxSize) {
     return res.status(400).json({
       success: false,
-      message: "Image size should be less than 5MB"
+      message: "Image size should be less than 10MB"
     });
   }
 
-  // Check file type
-  const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp", "image/gif"];
+  // File type check
+  const allowedMimes = [
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp",
+    "image/gif"
+  ];
+
   if (!allowedMimes.includes(req.file.mimetype)) {
     return res.status(400).json({
       success: false,
@@ -33,21 +41,19 @@ export const validateImage = (
   next();
 };
 
-// Single image upload middleware
+/* ================= SINGLE IMAGE UPLOAD ================= */
 export const uploadSingleImage = async (
   req: Request & { user?: any },
   res: Response,
   next: NextFunction
 ) => {
   try {
-    if (!req.file) {
-      return next();
-    }
+    if (!req.file) return next();
 
-    // Determine folder based on route/context
     let folder = "general";
     let publicId = "";
 
+    /* ===== Folder Detection ===== */
     if (req.baseUrl.includes("/api/tours")) {
       folder = "tours";
       if (req.params.id) {
@@ -56,12 +62,14 @@ export const uploadSingleImage = async (
         publicId = `tour-${req.user.id}-${Date.now()}`;
       }
     }
+
     else if (req.baseUrl.includes("/api/users")) {
       folder = "users";
       if (req.user) {
         publicId = `user-${req.user.id}-${Date.now()}`;
       }
     }
+
     else if (req.baseUrl.includes("/api/sliders")) {
       folder = "sliders";
       publicId = `slider-${Date.now()}`;
@@ -74,7 +82,7 @@ export const uploadSingleImage = async (
       }
     }
 
-    // Upload to Cloudinary
+    /* ===== Upload To Cloudinary ===== */
     const result = await uploadToCloudinary({
       buffer: req.file.buffer,
       folder,
@@ -88,42 +96,34 @@ export const uploadSingleImage = async (
       }
     });
 
-    // Attach image info to request
+    /* ===== Attach To Request Body ===== */
     req.body.image = result.secure_url;
     req.body.imagePublicId = result.public_id;
 
-    // Store in req.file for reference
+    /* ===== Store On File Object ===== */
     (req.file as any).cloudinaryUrl = result.secure_url;
     (req.file as any).publicId = result.public_id;
 
     next();
+
   } catch (error: any) {
     console.error("Image upload error:", error);
 
-    // Provide user-friendly error messages
-    if (error.message.includes("File size too large")) {
-      return res.status(400).json({
-        success: false,
-        message: "Image file is too large. Maximum size is 5MB."
-      });
-    }
+    const message =
+      error?.message?.includes("File size")
+        ? "Image file is too large. Maximum size is 10MB."
+        : error?.message?.includes("Invalid")
+        ? "Invalid image file. Please upload a valid image."
+        : "Failed to upload image. Please try again.";
 
-    if (error.message.includes("Invalid image")) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid image file. Please upload a valid image."
-      });
-    }
-
-    // Generic error
     return res.status(500).json({
       success: false,
-      message: "Failed to upload image. Please try again."
+      message
     });
   }
 };
 
-// Delete image middleware (for cleanup)
+/* ================= DELETE IMAGE ================= */
 export const deleteImageMiddleware = async (
   publicId: string
 ): Promise<boolean> => {
@@ -135,7 +135,7 @@ export const deleteImageMiddleware = async (
   }
 };
 
-// Update image middleware (delete old, upload new)
+/* ================= UPDATE IMAGE ================= */
 export const updateImage = async (
   req: Request,
   res: Response,
@@ -157,7 +157,9 @@ export const updateImage = async (
     }
 
     next();
+
   } catch (error) {
+    console.error("Update image middleware error:", error);
     next(error);
   }
 };
