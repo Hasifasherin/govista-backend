@@ -19,8 +19,6 @@ router.use(protect);
 
 
 // ================= Conversations =================
-// Mark conversation as read
-router.put("/:otherUserId/read", markAsRead);
 
 // Get list of conversations
 router.get("/", getConversations);
@@ -28,18 +26,27 @@ router.get("/", getConversations);
 // Get unread message count
 router.get("/unread", getUnreadCount);
 
-// Send message (supports bookingId, tourId)
-router.post("/", sendMessage);
+// Admin route FIRST before dynamic
+router.get("/admin/all", roleAccess("admin"), getAllMessages);
 
-// Get conversation with another user
+// Booking specific
 router.get("/booking/:bookingId", getConversation);
+
+// Conversation with user
 router.get("/conversation/:otherUserId", getConversation);
+
+// Mark conversation as read
+router.put("/conversation/:otherUserId/read", markAsRead);
+
+// Send message
+router.post("/", sendMessage);
 
 // Edit message
 router.put("/:id", editMessage);
 
-// Delete message (soft)
+// Delete message
 router.delete("/:id", deleteMessage);
+
 
 // ================= Admin =================
 
