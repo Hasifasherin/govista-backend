@@ -51,7 +51,10 @@ export const requestBooking = async (
       });
     }
 
-    const tour = await Tour.findById(tourId);
+    const tour = await Tour.findById(tourId).select(
+      "maxGroupSize price title createdBy"
+    );
+
     if (!tour) {
       return res.status(404).json({ success: false, message: "Tour not found" });
     }
@@ -115,7 +118,6 @@ export const requestBooking = async (
   }
 };
 
-
 // ================= USER BOOKINGS =================
 export const getUserBookings = async (
   req: Request & { user?: any },
@@ -123,15 +125,9 @@ export const getUserBookings = async (
   next: NextFunction
 ) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = 10;
-    const skip = (page - 1) * limit;
-
     const bookings = await Booking.find({ userId: req.user!.id })
       .populate("tourId", "title price location")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, count: bookings.length, bookings });
   } catch (error) {
@@ -151,7 +147,7 @@ export const getOperatorBookings = async (
     }
 
     const bookings = await Booking.find({ operatorId: req.user!.id })
-      .populate("tourId", "title")
+      .populate("tourId", "title maxGroupSize")
       .populate("userId", "firstName lastName email")
       .sort({ createdAt: -1 });
 
@@ -168,7 +164,6 @@ export const updateBookingStatus = async (
   next: NextFunction
 ) => {
   try {
-    // ✅ Role guard
     if (req.user!.role !== "operator") {
       return res.status(403).json({
         success: false,
@@ -179,7 +174,6 @@ export const updateBookingStatus = async (
     const bookingId = String(req.params.id);
     const { status } = req.body;
 
-    // ✅ ObjectId validation (FIXES TS ERROR)
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({
         success: false,
@@ -187,7 +181,6 @@ export const updateBookingStatus = async (
       });
     }
 
-    // ✅ Status validation
     if (!["accepted", "rejected"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -195,7 +188,8 @@ export const updateBookingStatus = async (
       });
     }
 
-    const booking = await Booking.findById(bookingId).populate("tourId");
+    const booking = await Booking.findById(bookingId)
+      .populate("tourId", "title maxGroupSize createdBy");
 
     if (!booking) {
       return res.status(404).json({
@@ -204,7 +198,6 @@ export const updateBookingStatus = async (
       });
     }
 
-    // ✅ Already handled
     if (booking.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -212,7 +205,6 @@ export const updateBookingStatus = async (
       });
     }
 
-    // ✅ Ownership check
     if (booking.operatorId.toString() !== req.user!.id) {
       return res.status(403).json({
         success: false,
@@ -222,15 +214,22 @@ export const updateBookingStatus = async (
 
     const tour = booking.tourId as any;
 
-    // ✅ Capacity re-check
+    if (!tour) {
+      return res.status(400).json({
+        success: false,
+        message: "Tour data missing",
+      });
+    }
+
+    // Capacity re-check
     if (status === "accepted") {
-      const existingBookings = await Booking.find({
+      const existingAccepted = await Booking.find({
         tourId: tour._id,
         travelDate: booking.travelDate,
         status: "accepted",
       });
 
-      const totalParticipants = existingBookings.reduce(
+      const totalParticipants = existingAccepted.reduce(
         (sum, b) => sum + b.participants,
         0
       );
@@ -246,7 +245,6 @@ export const updateBookingStatus = async (
     booking.status = status;
     await booking.save();
 
-    // ✅ Notify user
     await createNotification({
       user: booking.userId.toString(),
       title: "Booking Update",
@@ -277,7 +275,7 @@ export const getBookingDetails = async (
     }
 
     const booking = await Booking.findById(bookingId)
-      .populate("tourId", "title description location price duration availableDates image")
+      .populate("tourId", "title description location price duration availableDates image createdBy")
       .populate("userId", "firstName lastName email phone");
 
     if (!booking) {
@@ -299,7 +297,6 @@ export const getBookingDetails = async (
   }
 };
 
-
 // ================= CANCEL BOOKING =================
 export const cancelBooking = async (
   req: Request & { user?: any },
@@ -309,7 +306,6 @@ export const cancelBooking = async (
   try {
     const bookingId = String(req.params.id);
 
-    // ✅ ObjectId validation (FIXES TS error)
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({
         success: false,
@@ -317,7 +313,8 @@ export const cancelBooking = async (
       });
     }
 
-    const booking = await Booking.findById(bookingId).populate("tourId");
+    const booking = await Booking.findById(bookingId)
+      .populate("tourId", "title createdBy");
 
     if (!booking) {
       return res.status(404).json({
@@ -326,7 +323,6 @@ export const cancelBooking = async (
       });
     }
 
-    // ✅ Ownership check
     if (booking.userId.toString() !== req.user!.id) {
       return res.status(403).json({
         success: false,
@@ -334,7 +330,6 @@ export const cancelBooking = async (
       });
     }
 
-    // ✅ Status check
     if (booking.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -347,7 +342,6 @@ export const cancelBooking = async (
 
     const tour = booking.tourId as any;
 
-    // ✅ Notify operator
     await createNotification({
       user: tour.createdBy.toString(),
       title: "Booking Cancelled",
@@ -360,4 +354,3 @@ export const cancelBooking = async (
     next(error);
   }
 };
-

@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import User from "../models/User";
+import User, { IUser } from "../models/User";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../utils/jwt";
+import crypto from "crypto";
 
+// Helper to create consistent errors
 const createError = (message: string, statusCode: number) => {
   const err = new Error(message) as any;
   err.statusCode = statusCode;
@@ -10,11 +12,7 @@ const createError = (message: string, statusCode: number) => {
 };
 
 // ================= REGISTER =================
-export const register = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const {
       firstName,
@@ -23,31 +21,26 @@ export const register = async (
       phone,
       gender,
       dob,
-      role, 
+      role,
       password,
-      confirmPassword, 
+      confirmPassword,
     } = req.body;
 
-    // ✅ Required field validation
     if (!firstName || !lastName || !email || !phone || !gender || !dob || !password || !confirmPassword) {
       throw createError("All fields are required", 400);
     }
 
-    // ✅ Password confirmation validation
     if (password !== confirmPassword) {
       throw createError("Passwords do not match", 400);
     }
 
-    // ✅ Role validation (ONLY user / operator allowed)
     const allowedRoles = ["user", "operator"];
-    const selectedRole = role || "user"; // default to user if none selected
-
+    const selectedRole = role || "user";
     if (!allowedRoles.includes(selectedRole)) {
       throw createError("Invalid role selected", 400);
     }
 
     const normalizedEmail = email.toLowerCase();
-
     const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       throw createError("User already exists", 400);
@@ -61,7 +54,7 @@ export const register = async (
       gender,
       dob,
       password,
-      role: selectedRole // <- use selected role
+      role: selectedRole,
     });
 
     const token = generateToken(user._id.toString(), user.role);
@@ -75,44 +68,30 @@ export const register = async (
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-
 // ================= LOGIN =================
-export const login = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      throw createError("All fields are required", 400);
-    }
+    if (!email || !password) throw createError("All fields are required", 400);
 
     const normalizedEmail = email.toLowerCase();
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
 
-    if (!user) {
-      throw createError("user not found ", 400);
-    }
+    // Do not reveal whether email exists
+    if (!user) throw createError("Invalid email or password", 401);
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      throw createError("Invalid email or password", 401);
-    }
+    if (!isMatch) throw createError("Invalid email or password", 401);
 
-    if (user.isBlocked) {
-      throw createError("Your account has been blocked", 403);
-    }
-
+    if (user.isBlocked) throw createError("Your account has been blocked", 403);
     if (user.role === "operator" && !user.isApproved) {
       throw createError("Operator account is not approved yet", 403);
     }
@@ -127,10 +106,75 @@ export const login = async (
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
+  } catch (error) {
+    next(error);
+  }
+};
 
+// ================= FORGOT PASSWORD =================
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+    if (!email) throw createError("Email is required", 400);
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Now we return an error so frontend can show it
+      return res.status(404).json({
+        success: false,
+        message: "Email not found. Please enter a registered email.",
+      });
+    }
+
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validateBeforeSave: false });
+
+    const resetURL = `${process.env.CLIENT_URL}/auth/reset-password/${resetToken}`;
+
+    // TODO: send email
+    console.log("Reset URL:", resetURL);
+
+    res.status(200).json({
+      success: true,
+      message: "Reset link has been sent to your email.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ================= RESET PASSWORD =================
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { password, confirmPassword } = req.body;
+    if (!password || !confirmPassword) throw createError("All fields are required", 400);
+    if (password !== confirmPassword) throw createError("Passwords do not match", 400);
+
+    // Ensure token is a string
+    const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() },
+    }) as IUser;
+
+    if (!user) throw createError("Token is invalid or has expired", 400);
+
+    user.password = password;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been reset successfully",
+    });
   } catch (error) {
     next(error);
   }

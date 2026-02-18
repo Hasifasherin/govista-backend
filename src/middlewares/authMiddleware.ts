@@ -1,12 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import User from "../models/User";
+import User, { IUser } from "../models/User";
+import crypto from "crypto";
 
+// JWT payload type
 interface JwtPayload {
   id: string;
   role: "user" | "operator" | "admin";
 }
 
+// ---------------------- PROTECT ROUTE ----------------------
 export const protect = async (
   req: Request & { user?: any },
   res: Response,
@@ -24,21 +27,16 @@ export const protect = async (
 
     const token = authHeader.split(" ")[1];
 
-    // 🔥 ADD THIS AT TOP OF protect()
-const decoded = jwt.verify(
-  token,
-  process.env.JWT_SECRET as string
-) as JwtPayload;
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as JwtPayload;
 
-// ✅ BYPASS FOR ADMIN TOKEN
-if (decoded.role === "admin") {
-  req.user = {
-    id: "admin",
-    role: "admin",
-  };
-  return next();
-}
-
+    // ✅ BYPASS FOR ADMIN TOKEN
+    if (decoded.role === "admin") {
+      req.user = { id: "admin", role: "admin" };
+      return next();
+    }
 
     // Fetch full user from DB
     const user = await User.findById(decoded.id);
@@ -50,7 +48,7 @@ if (decoded.role === "admin") {
       });
     }
 
-    // ❌ BLOCKED USER CHECK (VERY IMPORTANT)
+    // ❌ BLOCKED USER CHECK
     if (user.isBlocked) {
       return res.status(403).json({
         success: false,
@@ -76,7 +74,7 @@ if (decoded.role === "admin") {
   }
 };
 
-// ✅ UPDATED: ROLE-BASED ACCESS (Now accepts multiple roles)
+// ---------------------- ROLE ACCESS ----------------------
 export const roleAccess = (...allowedRoles: ("user" | "operator" | "admin")[]) => {
   return (
     req: Request & { user?: any },
@@ -101,7 +99,48 @@ export const roleAccess = (...allowedRoles: ("user" | "operator" | "admin")[]) =
   };
 };
 
-// ✅ ADDED: Optional - Create specific middleware combinations
+// ---------------------- PREDEFINED ROLE COMBINATIONS ----------------------
 export const adminOrOperator = roleAccess("admin", "operator");
 export const adminOrUser = roleAccess("admin", "user");
 export const operatorOrUser = roleAccess("operator", "user");
+
+// ---------------------- FORGOT PASSWORD MIDDLEWARE ----------------------
+export const forgotPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() }) as IUser;
+
+    if (!user) {
+      // Prevent email enumeration
+      return res.status(200).json({
+        success: true,
+        message: "If an account exists, a reset link has been sent."
+      });
+    }
+
+    // Generate reset token
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Construct reset URL
+    const resetURL = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+
+    // TODO: Send reset URL via email (e.g., Nodemailer)
+    console.log("Password reset URL:", resetURL);
+
+    return res.status(200).json({
+      success: true,
+      message: "If an account exists, a reset link has been sent."
+    });
+  } catch (error) {
+    next(error);
+  }
+};
