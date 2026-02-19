@@ -10,6 +10,8 @@ const normalizeDate = (dateStr: string) => {
   return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
 };
 
+
+
 // ================= REQUEST BOOKING =================
 export const requestBooking = async (
   req: Request & { user?: any },
@@ -26,19 +28,22 @@ export const requestBooking = async (
     if (!tourId || !travelDate) {
       return res.status(400).json({
         success: false,
-        message: "tourId and travelDate are required"
+        message: "tourId and travelDate are required",
       });
     }
 
     if (!participants || participants < 1) {
       return res.status(400).json({
         success: false,
-        message: "participants must be at least 1"
+        message: "participants must be at least 1",
       });
     }
 
     if (!mongoose.Types.ObjectId.isValid(tourId)) {
-      return res.status(400).json({ success: false, message: "Invalid tour id" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid tour id",
+      });
     }
 
     const normalizedTravelDate = normalizeDate(travelDate);
@@ -47,7 +52,7 @@ export const requestBooking = async (
     if (normalizedTravelDate < today) {
       return res.status(400).json({
         success: false,
-        message: "Past dates not allowed"
+        message: "Past dates not allowed",
       });
     }
 
@@ -56,7 +61,10 @@ export const requestBooking = async (
     );
 
     if (!tour) {
-      return res.status(404).json({ success: false, message: "Tour not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Tour not found",
+      });
     }
 
     // Prevent duplicate booking
@@ -64,13 +72,13 @@ export const requestBooking = async (
       tourId,
       userId: req.user.id,
       travelDate: normalizedTravelDate,
-      status: { $in: ["pending", "accepted"] }
+      status: { $in: ["pending", "accepted"] },
     });
 
     if (duplicate) {
       return res.status(400).json({
         success: false,
-        message: "Booking already exists"
+        message: "Booking already exists",
       });
     }
 
@@ -78,7 +86,7 @@ export const requestBooking = async (
     const existingBookings = await Booking.find({
       tourId,
       travelDate: normalizedTravelDate,
-      status: { $in: ["pending", "accepted"] }
+      status: { $in: ["pending", "accepted"] },
     });
 
     const bookedCount = existingBookings.reduce(
@@ -89,7 +97,7 @@ export const requestBooking = async (
     if (bookedCount + participants > tour.maxGroupSize) {
       return res.status(400).json({
         success: false,
-        message: "Not enough available slots"
+        message: "Not enough available slots",
       });
     }
 
@@ -102,14 +110,14 @@ export const requestBooking = async (
       status: "pending",
       paymentStatus: "unpaid",
       priceAtBooking: tour.price,
-      totalPrice: tour.price * participants
+      totalPrice: tour.price * participants,
     });
 
     await createNotification({
       user: tour.createdBy.toString(),
       title: "New Booking Request",
       message: `New booking request for "${tour.title}".`,
-      type: "booking"
+      type: "booking",
     });
 
     res.status(201).json({ success: true, booking });
@@ -117,6 +125,8 @@ export const requestBooking = async (
     next(error);
   }
 };
+
+
 
 // ================= USER BOOKINGS =================
 export const getUserBookings = async (
@@ -129,11 +139,17 @@ export const getUserBookings = async (
       .populate("tourId", "title price location")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, count: bookings.length, bookings });
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
   } catch (error) {
     next(error);
   }
 };
+
+
 
 // ================= OPERATOR BOOKINGS =================
 export const getOperatorBookings = async (
@@ -143,19 +159,30 @@ export const getOperatorBookings = async (
 ) => {
   try {
     if (req.user!.role !== "operator") {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
     }
 
-    const bookings = await Booking.find({ operatorId: req.user!.id })
-      .populate("tourId", "title maxGroupSize")
+    const bookings = await Booking.find({
+      operatorId: req.user!.id,
+    })
+      .populate("tourId", "title price maxGroupSize")
       .populate("userId", "firstName lastName email")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, count: bookings.length, bookings });
+    res.json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
   } catch (error) {
     next(error);
   }
 };
+
+
 
 // ================= ACCEPT / REJECT =================
 export const updateBookingStatus = async (
@@ -214,14 +241,7 @@ export const updateBookingStatus = async (
 
     const tour = booking.tourId as any;
 
-    if (!tour) {
-      return res.status(400).json({
-        success: false,
-        message: "Tour data missing",
-      });
-    }
-
-    // Capacity re-check
+    // Capacity re-check on acceptance
     if (status === "accepted") {
       const existingAccepted = await Booking.find({
         tourId: tour._id,
@@ -242,7 +262,16 @@ export const updateBookingStatus = async (
       }
     }
 
+    // Update status
     booking.status = status;
+
+    // ✅ Reset payment if rejected
+    if (status === "rejected") {
+      booking.paymentStatus = "unpaid";
+      booking.amountPaid = 0;
+      booking.stripePaymentIntentId = undefined as any;
+    }
+
     await booking.save();
 
     await createNotification({
@@ -257,6 +286,8 @@ export const updateBookingStatus = async (
     next(error);
   }
 };
+
+
 
 // ================= GET BOOKING DETAILS =================
 export const getBookingDetails = async (
@@ -275,20 +306,31 @@ export const getBookingDetails = async (
     }
 
     const booking = await Booking.findById(bookingId)
-      .populate("tourId", "title description location price duration availableDates image createdBy")
+      .populate(
+        "tourId",
+        "title description location price duration availableDates image createdBy"
+      )
       .populate("userId", "firstName lastName email phone");
 
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
     }
 
-    const isUserOwner = booking.userId._id.toString() === req.user!.id;
+    const isUserOwner =
+      (booking.userId as any)._id.toString() === req.user!.id;
+
     const isOperatorOwner =
       req.user!.role === "operator" &&
       booking.operatorId.toString() === req.user!.id;
 
     if (!isUserOwner && !isOperatorOwner && req.user!.role !== "admin") {
-      return res.status(403).json({ success: false, message: "Access denied" });
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
     }
 
     res.json({ success: true, booking });
@@ -296,6 +338,8 @@ export const getBookingDetails = async (
     next(error);
   }
 };
+
+
 
 // ================= CANCEL BOOKING =================
 export const cancelBooking = async (
@@ -330,14 +374,16 @@ export const cancelBooking = async (
       });
     }
 
-    if (booking.status !== "pending") {
+    // ✅ Allow cancel for pending + accepted
+    if (!["pending", "accepted"].includes(booking.status)) {
       return res.status(400).json({
         success: false,
-        message: "Only pending bookings can be cancelled",
+        message: "Booking cannot be cancelled at this stage",
       });
     }
 
     booking.status = "cancelled";
+
     await booking.save();
 
     const tour = booking.tourId as any;
@@ -352,5 +398,53 @@ export const cancelBooking = async (
     res.json({ success: true, booking });
   } catch (error) {
     next(error);
+  }
+};
+// ================= CONFIRM PAYMENT (ONE-CLICK) =================
+export const confirmBookingPayment = async (
+  req: Request & { user?: any },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const bookingId = String(req.params.id);
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking id",
+      });
+    }
+
+    const booking = await Booking.findById(bookingId)
+      .populate("tourId", "title createdBy");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    // Only the booking owner can confirm payment
+    if (booking.userId.toString() !== req.user!.id) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    // Booking must be accepted first
+    if (booking.status !== "accepted") {
+      return res.status(400).json({ success: false, message: "Booking must be accepted first" });
+    }
+
+    // Already paid
+    if (booking.paymentStatus === "paid") {
+      return res.json({ success: true, message: "Already paid", booking });
+    }
+
+    // ✅ Mark as paid
+    booking.paymentStatus = "paid";
+    await booking.save();
+
+    res.json({ success: true, message: "Payment confirmed", booking });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: "Payment failed" });
   }
 };

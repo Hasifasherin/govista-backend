@@ -1,23 +1,48 @@
 import express from "express";
 import { protect, roleAccess } from "../middlewares/authMiddleware";
-import { 
-  createPaymentIntent, 
+import {
+  createPaymentIntent,
   checkPaymentStatus,
   createRefund,
-  confirmPayment 
+  confirmPayment,
 } from "../controllers/paymentController";
 
 const router = express.Router();
 
-// Protected route to create payment
-router.post("/create-intent", protect, createPaymentIntent);
+// ================= USER PAYMENTS =================
 
-router.post("/confirm/:bookingId", protect, confirmPayment);
+// Create Stripe payment intent
+router.post(
+  "/create-intent",
+  protect,
+  roleAccess("user"),
+  createPaymentIntent
+);
 
+// Confirm payment after frontend success
+router.post(
+  "/confirm/:bookingId",
+  protect,
+  roleAccess("user"),
+  confirmPayment
+);
 
 // Check payment status
-router.get("/status/:bookingId", protect, checkPaymentStatus);
+router.get(
+  "/status/:bookingId",
+  protect,
+  roleAccess("user"),
+  checkPaymentStatus
+);
 
-// Create refund (admin or operator) -
-router.post("/refund", protect, roleAccess("admin", "operator"), createRefund);
+// ================= REFUND =================
+
+// Admin / Operator refund
+router.post(
+  "/refund",
+  protect,
+  roleAccess("admin", "operator"),
+  createRefund
+);
+
 export default router;

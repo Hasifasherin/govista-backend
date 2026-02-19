@@ -41,31 +41,49 @@ const bookingSchema = new mongoose.Schema(
       required: true
     },
 
+    //  UPDATED STATUS FLOW
     status: {
       type: String,
-      enum: ["pending", "accepted", "rejected", "cancelled", "completed"],
+      enum: [
+        "pending",
+        "accepted",
+        "rejected",
+        "cancelled",
+        "confirmed",
+        "completed"
+      ],
       default: "pending"
     },
 
     paymentStatus: {
       type: String,
-      enum: ["unpaid", "paid", "refunded"],
-      default: "unpaid"
+      enum: ["unpaid", "paid", "failed", "refunded"],
+      default: "unpaid",
+    },
+
+
+    stripePaymentIntentId: {
+      type: String,
+    },
+
+    stripeChargeId: {
+      type: String,
     },
 
     amountPaid: {
       type: Number,
-      default: 0
     },
 
-    stripePaymentIntentId: {
-      type: String
+
+
+    paidAt: {
+      type: Date
     }
   },
   { timestamps: true }
 );
 
-// ✅ Indexes
+// ✅ Indexes for performance
 bookingSchema.index({ tourId: 1, travelDate: 1 });
 bookingSchema.index({ operatorId: 1, travelDate: 1 });
 bookingSchema.index({ userId: 1 });
